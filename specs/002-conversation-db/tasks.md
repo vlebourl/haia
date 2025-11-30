@@ -153,19 +153,19 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T061 [P] Create Pydantic models (MessageCreate, MessageResponse, ConversationResponse) in src/haia/db/models.py
-- [ ] T062 [P] Add SQLAlchemy event hooks for query logging (DEBUG level) in src/haia/db/session.py
-- [ ] T063 [P] Document repository usage examples in src/haia/db/repository.py docstrings
-- [ ] T064 Add connection pooling configuration (pool_size, max_overflow) to engine creation
-- [ ] T065 Add database initialization function (init_db) for schema creation in src/haia/db/session.py
-- [ ] T066 Add auto-migration application on startup in src/haia/db/session.py
-- [ ] T067 [P] Add comprehensive error handling with custom exceptions
-- [ ] T068 [P] Add unit tests for session lifecycle (get_db dependency) in tests/unit/db/test_session.py
-- [ ] T069 [P] Add integration test for concurrent writes in tests/integration/test_concurrency.py
-- [ ] T070 Review and optimize all database queries for performance
-- [ ] T071 Run full test suite and verify 100% pass rate
-- [ ] T072 Validate quickstart.md examples work correctly
-- [ ] T073 Performance benchmark: Verify all success criteria met (<100ms retrieval for 1000 messages)
+- [X] T061 [P] Create Pydantic models (MessageCreate, MessageResponse, ConversationResponse) in src/haia/db/models.py
+- [X] T062 [P] Add SQLAlchemy event hooks for query logging (DEBUG level) in src/haia/db/session.py
+- [X] T063 [P] Document repository usage examples in src/haia/db/repository.py docstrings
+- [X] T064 Add connection pooling configuration (pool_size, max_overflow) to engine creation
+- [X] T065 Add database initialization function (init_db) for schema creation in src/haia/db/session.py
+- [X] T066 Add auto-migration application on startup in src/haia/db/session.py
+- [X] T067 [P] Add comprehensive error handling with custom exceptions
+- [X] T068 [P] Add unit tests for session lifecycle (get_db dependency) in tests/unit/db/test_session.py
+- [X] T069 [P] Add integration test for concurrent writes in tests/integration/test_concurrency.py
+- [X] T070 Review and optimize all database queries for performance
+- [X] T071 Run full test suite and verify 100% pass rate
+- [X] T072 Validate quickstart.md examples work correctly
+- [X] T073 Performance benchmark: Verify all success criteria met (<100ms retrieval for 1000 messages)
 
 ---
 
