@@ -126,24 +126,24 @@
 
 ### Tests for User Story 3
 
-- [ ] T046 [P] [US3] Create test_repository.py with list_conversations unit tests in tests/unit/db/
-- [ ] T047 [P] [US3] Create test_repository.py with delete_conversation unit tests in tests/unit/db/
-- [ ] T048 [P] [US3] Create test_repository.py with get_message_count unit tests in tests/unit/db/
-- [ ] T049 [P] [US3] Create test_conversation_management.py integration test for listing in tests/integration/
-- [ ] T050 [P] [US3] Create test_conversation_management.py integration test for cascade delete in tests/integration/
+- [X] T046 [P] [US3] Create test_repository.py with list_conversations unit tests in tests/unit/db/
+- [X] T047 [P] [US3] Create test_repository.py with delete_conversation unit tests in tests/unit/db/
+- [X] T048 [P] [US3] Create test_repository.py with get_message_count unit tests in tests/unit/db/
+- [X] T049 [P] [US3] Create test_conversation_management.py integration test for listing in tests/integration/
+- [X] T050 [P] [US3] Create test_conversation_management.py integration test for cascade delete in tests/integration/
 
 ### Implementation for User Story 3
 
-- [ ] T051 [P] [US3] Implement list_conversations() method with ORDER BY updated_at DESC in src/haia/db/repository.py
-- [ ] T052 [P] [US3] Implement delete_conversation() method with CASCADE behavior in src/haia/db/repository.py
-- [ ] T053 [P] [US3] Implement get_message_count() method with COUNT query in src/haia/db/repository.py
-- [ ] T054 [US3] Add pagination support (limit, offset) to list_conversations() method
-- [ ] T055 [US3] Add automatic updated_at timestamp update on message addition
-- [ ] T056 [US3] Verify CASCADE delete constraint in Message foreign key configuration
-- [ ] T057 [US3] Add logging for conversation listing and deletion operations
-- [ ] T058 [US3] Run unit tests and verify metadata tracking correctness
-- [ ] T059 [US3] Run integration tests and verify cascade deletion works
-- [ ] T060 [US3] Performance test: Verify list_conversations <30ms for 100 conversations
+- [X] T051 [P] [US3] Implement list_conversations() method with ORDER BY updated_at DESC in src/haia/db/repository.py
+- [X] T052 [P] [US3] Implement delete_conversation() method with CASCADE behavior in src/haia/db/repository.py
+- [X] T053 [P] [US3] Implement get_message_count() method with COUNT query in src/haia/db/repository.py
+- [X] T054 [US3] Add pagination support (limit, offset) to list_conversations() method
+- [X] T055 [US3] Add automatic updated_at timestamp update on message addition
+- [X] T056 [US3] Verify CASCADE delete constraint in Message foreign key configuration
+- [X] T057 [US3] Add logging for conversation listing and deletion operations
+- [X] T058 [US3] Run unit tests and verify metadata tracking correctness
+- [X] T059 [US3] Run integration tests and verify cascade deletion works
+- [X] T060 [US3] Performance test: Verify list_conversations <30ms for 100 conversations
 
 **Checkpoint**: All user stories should now be independently functional - complete conversation lifecycle management with context windows
 

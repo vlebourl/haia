@@ -6,7 +6,7 @@ all database operations for conversations and messages.
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from haia.db.models import Conversation, Message
@@ -178,3 +178,87 @@ class ConversationRepository:
         )
 
         return messages
+
+    async def list_conversations(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[Conversation]:
+        """List all conversations ordered by last activity (most recent first).
+
+        Args:
+            limit: Maximum number of conversations to retrieve (default: 50)
+            offset: Number of conversations to skip for pagination (default: 0)
+
+        Returns:
+            list[Conversation]: List of conversations ordered by updated_at DESC
+
+        Raises:
+            SQLAlchemyError: If database query fails
+
+        Performance:
+            O(log N + limit) where N is total conversations
+            Uses index on updated_at for efficient sorting
+        """
+        stmt = (
+            select(Conversation)
+            .order_by(Conversation.updated_at.desc())  # Most recent first
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.session.execute(stmt)
+        conversations = list(result.scalars().all())
+
+        logger.debug(f"Listed {len(conversations)} conversations (limit: {limit}, offset: {offset})")
+
+        return conversations
+
+    async def delete_conversation(self, conversation_id: int) -> bool:
+        """Delete a conversation and all associated messages (CASCADE).
+
+        Args:
+            conversation_id: ID of conversation to delete
+
+        Returns:
+            bool: True if conversation existed and was deleted, False if not found
+
+        Raises:
+            SQLAlchemyError: If database delete fails
+
+        Side Effects:
+            - Deletes conversation row from database
+            - Automatically deletes all messages via CASCADE constraint
+        """
+        stmt = delete(Conversation).where(Conversation.id == conversation_id)
+        result = await self.session.execute(stmt)
+
+        deleted = result.rowcount > 0
+
+        if deleted:
+            logger.info(f"Deleted conversation {conversation_id} with CASCADE to messages")
+        else:
+            logger.debug(f"Attempted to delete non-existent conversation {conversation_id}")
+
+        return deleted
+
+    async def get_message_count(self, conversation_id: int) -> int:
+        """Get total number of messages in a conversation.
+
+        Args:
+            conversation_id: ID of conversation to count messages for
+
+        Returns:
+            int: Total number of messages (0 if conversation doesn't exist)
+
+        Raises:
+            SQLAlchemyError: If database query fails
+
+        Performance:
+            O(1) - SQLite COUNT(*) is optimized when using indexes
+        """
+        stmt = (
+            select(func.count(Message.id))
+            .where(Message.conversation_id == conversation_id)
+        )
+        result = await self.session.execute(stmt)
+        count = result.scalar() or 0
+
+        return count

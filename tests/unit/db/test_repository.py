@@ -1,6 +1,7 @@
 """Unit tests for ConversationRepository."""
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from haia.db.models import Base
@@ -13,6 +14,8 @@ async def async_session() -> async_sessionmaker[AsyncSession]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
 
     async with engine.begin() as conn:
+        # Enable foreign key constraints in SQLite
+        await conn.execute(text("PRAGMA foreign_keys = ON"))
         await conn.run_sync(Base.metadata.create_all)
 
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
@@ -184,6 +187,185 @@ class TestGetConversation:
 
             assert retrieved is not None
             assert len(retrieved.messages) == 2
+
+
+class TestListConversations:
+    """Tests for list_conversations method."""
+
+    async def test_list_conversations_empty(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test listing conversations when none exist."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            conversations = await repo.list_conversations()
+
+            assert conversations == []
+
+    async def test_list_conversations_sorted_by_updated_at(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test that conversations are sorted by updated_at DESC (most recent first)."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+
+            # Create 3 conversations
+            conv1 = await repo.create_conversation()
+            conv2 = await repo.create_conversation()
+            conv3 = await repo.create_conversation()
+
+            # Add messages to conversations in different order
+            await repo.add_message(conv1.id, "user", "Message to conv1")
+            await repo.add_message(conv3.id, "user", "Message to conv3")
+            await repo.add_message(conv2.id, "user", "Message to conv2")
+
+            await session.commit()
+
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            conversations = await repo.list_conversations()
+
+            # Should be sorted by updated_at DESC: conv2, conv3, conv1
+            assert len(conversations) == 3
+            assert conversations[0].id == conv2.id
+            assert conversations[1].id == conv3.id
+            assert conversations[2].id == conv1.id
+
+    async def test_list_conversations_with_pagination(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test pagination with limit and offset."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+
+            # Create 10 conversations
+            for _ in range(10):
+                await repo.create_conversation()
+
+            await session.commit()
+
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+
+            # Get first 5
+            page1 = await repo.list_conversations(limit=5, offset=0)
+            assert len(page1) == 5
+
+            # Get next 5
+            page2 = await repo.list_conversations(limit=5, offset=5)
+            assert len(page2) == 5
+
+            # Verify no overlap
+            page1_ids = {conv.id for conv in page1}
+            page2_ids = {conv.id for conv in page2}
+            assert page1_ids.isdisjoint(page2_ids)
+
+
+class TestDeleteConversation:
+    """Tests for delete_conversation method."""
+
+    async def test_delete_conversation_returns_true_when_exists(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test that delete_conversation returns True when conversation exists."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            conversation = await repo.create_conversation()
+            await session.commit()
+            conv_id = conversation.id
+
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            deleted = await repo.delete_conversation(conv_id)
+            await session.commit()
+
+            assert deleted is True
+
+    async def test_delete_conversation_returns_false_when_not_exists(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test that delete_conversation returns False when conversation doesn't exist."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            deleted = await repo.delete_conversation(999999)
+            await session.commit()
+
+            assert deleted is False
+
+    async def test_delete_conversation_cascades_to_messages(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test that deleting conversation also deletes all messages (CASCADE)."""
+        from sqlalchemy import select
+
+        from haia.db.models import Message
+
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            conversation = await repo.create_conversation()
+            await repo.add_message(conversation.id, "user", "Message 1")
+            await repo.add_message(conversation.id, "user", "Message 2")
+            await session.commit()
+            conv_id = conversation.id
+
+        # Verify messages exist
+        async with async_session() as session:
+            result = await session.execute(select(Message).where(Message.conversation_id == conv_id))
+            messages = list(result.scalars().all())
+            assert len(messages) == 2
+
+        # Delete conversation
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            await repo.delete_conversation(conv_id)
+            await session.commit()
+
+        # Verify messages are also deleted
+        async with async_session() as session:
+            result = await session.execute(select(Message).where(Message.conversation_id == conv_id))
+            messages = list(result.scalars().all())
+            assert len(messages) == 0
+
+
+class TestGetMessageCount:
+    """Tests for get_message_count method."""
+
+    async def test_get_message_count_empty_conversation(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test message count for empty conversation."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            conversation = await repo.create_conversation()
+            await session.commit()
+
+            count = await repo.get_message_count(conversation.id)
+            assert count == 0
+
+    async def test_get_message_count_with_messages(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test message count with multiple messages."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            conversation = await repo.create_conversation()
+
+            for i in range(25):
+                await repo.add_message(conversation.id, "user", f"Message {i + 1}")
+
+            await session.commit()
+
+            count = await repo.get_message_count(conversation.id)
+            assert count == 25
+
+    async def test_get_message_count_nonexistent_conversation(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test message count for non-existent conversation returns 0."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            count = await repo.get_message_count(999999)
+            assert count == 0
 
 
 class TestGetContextMessages:

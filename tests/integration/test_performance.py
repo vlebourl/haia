@@ -12,9 +12,13 @@ from haia.db.repository import ConversationRepository
 @pytest.fixture
 async def async_session() -> async_sessionmaker[AsyncSession]:
     """Create an in-memory SQLite database for testing."""
+    from sqlalchemy import text
+
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
 
     async with engine.begin() as conn:
+        # Enable foreign key constraints in SQLite
+        await conn.execute(text("PRAGMA foreign_keys = ON"))
         await conn.run_sync(Base.metadata.create_all)
 
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
