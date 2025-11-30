@@ -38,6 +38,7 @@ ENV/
 .env.local
 .env.*.local
 *.env
+.anthropic_key
 local_config.json
 config.local.json
 secrets.json
