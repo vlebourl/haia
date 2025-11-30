@@ -178,6 +178,111 @@ class TestChatCompletionResponse:
         pass
 
 
+class TestStreamingModels:
+    """Tests for streaming chunk models (T037)."""
+
+    def test_message_delta_creation(self):
+        """Test creating a MessageDelta."""
+        from haia.api.models.chat import MessageDelta
+
+        delta = MessageDelta(role="assistant", content="Hello")
+
+        assert delta.role == "assistant"
+        assert delta.content == "Hello"
+
+    def test_message_delta_with_only_content(self):
+        """Test MessageDelta with only content field."""
+        from haia.api.models.chat import MessageDelta
+
+        delta = MessageDelta(content="World")
+
+        assert delta.content == "World"
+        assert delta.role is None
+
+    def test_choice_delta_creation(self):
+        """Test creating a ChoiceDelta."""
+        from haia.api.models.chat import ChoiceDelta, MessageDelta
+
+        delta = ChoiceDelta(
+            index=0,
+            delta=MessageDelta(content="Test"),
+            finish_reason=None,
+        )
+
+        assert delta.index == 0
+        assert delta.delta.content == "Test"
+        assert delta.finish_reason is None
+
+    def test_choice_delta_with_finish_reason(self):
+        """Test ChoiceDelta with finish_reason set."""
+        from haia.api.models.chat import ChoiceDelta, MessageDelta
+
+        delta = ChoiceDelta(
+            index=0,
+            delta=MessageDelta(content=""),
+            finish_reason="stop",
+        )
+
+        assert delta.finish_reason == "stop"
+
+    def test_chat_completion_chunk_creation(self):
+        """Test creating a ChatCompletionChunk."""
+        from haia.api.models.chat import ChatCompletionChunk, ChoiceDelta, MessageDelta
+
+        chunk = ChatCompletionChunk(
+            id="chatcmpl-test",
+            object="chat.completion.chunk",
+            created=1234567890,
+            model="haia",
+            choices=[
+                ChoiceDelta(
+                    index=0,
+                    delta=MessageDelta(content="Test "),
+                    finish_reason=None,
+                )
+            ],
+        )
+
+        assert chunk.id == "chatcmpl-test"
+        assert chunk.object == "chat.completion.chunk"
+        assert len(chunk.choices) == 1
+        assert chunk.choices[0].delta.content == "Test "
+
+    def test_chat_completion_chunk_factory_method(self):
+        """Test ChatCompletionChunk.from_delta factory method."""
+        from haia.api.models.chat import ChatCompletionChunk
+
+        chunk = ChatCompletionChunk.from_delta(
+            content="Hello ",
+            model="haia",
+            chunk_id="test-123",
+            finish_reason=None,
+        )
+
+        assert chunk.id == "test-123"
+        assert chunk.model == "haia"
+        assert chunk.choices[0].delta.content == "Hello "
+        assert chunk.choices[0].finish_reason is None
+
+    def test_final_chunk_with_usage(self):
+        """Test final chunk with usage statistics."""
+        from haia.api.models.chat import ChatCompletionChunk, TokenUsage
+
+        chunk = ChatCompletionChunk.create_final_chunk(
+            model="haia",
+            chunk_id="test-final",
+            usage=TokenUsage(
+                prompt_tokens=10,
+                completion_tokens=20,
+                total_tokens=30,
+            ),
+        )
+
+        assert chunk.choices[0].finish_reason == "stop"
+        assert chunk.usage is not None
+        assert chunk.usage.total_tokens == 30
+
+
 class TestErrorModels:
     """Tests for error response models."""
 
