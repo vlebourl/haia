@@ -9,6 +9,13 @@ dependencies = [
     "pydantic-settings>=2.0",
     "httpx>=0.25",
     "anthropic>=0.40",
+    "fastapi>=0.104",
+    "uvicorn>=0.24",
+    "sse-starlette>=1.8",
+    "pydantic-ai>=0.0.14",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.19",
+    "alembic>=1.12",
 ]
 
 [project.optional-dependencies]
