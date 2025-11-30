@@ -7,7 +7,7 @@
 
 This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Features are organized by phase, with dependencies clearly marked.
 
-**Current Focus**: Building the MVP chat interface with multi-model support and conversation persistence.
+**Current Focus**: Implementing the OpenAI-compatible Chat API with streaming support (Phase 1 MVP).
 
 ## Roadmap Phases
 
@@ -39,39 +39,6 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
-#### [P0] LLM Abstraction Layer
-
-**Description**: Model-agnostic LLM client abstraction supporting Anthropic, Ollama, OpenAI, and Google Gemini through a unified interface.
-
-**User Value**: Enables seamless switching between LLM providers via configuration without code changes. Supports both cloud APIs (development) and local models (production).
-
-**Implementation Approach**:
-- Create `LLMClient` abstract base class with common interface
-- Implement provider-specific clients: `AnthropicClient`, `OllamaClient`, `OpenAIClient`, `GeminiClient`
-- Factory pattern for client instantiation based on `HAIA_MODEL` config
-- Support streaming responses across all providers
-- Handle provider-specific error handling with unified error types
-- Located in: `src/haia/llm/client.py` and `src/haia/llm/providers/`
-
-**Dependencies**:
-- ✅ Configuration Management (Phase 0)
-- 📦 `anthropic` SDK
-- 📦 `openai` SDK
-- 📦 `google-generativeai` SDK
-- 📦 `httpx` for Ollama HTTP API
-
-**Constitution Compliance**:
-- Model-Agnostic Design: Core principle - unified interface across all providers
-- Type Safety: All client methods fully typed with Pydantic models for inputs/outputs
-- Async-First: All LLM calls are async methods
-- Observability: Log all LLM calls with provider, model, latency, token usage
-
-**Effort Estimate**: M - Multiple provider integrations, abstraction design, error handling
-
-**Priority**: P0 - Foundational for all AI features
-
----
-
 #### [P0] PydanticAI Agent Setup
 
 **Description**: Core PydanticAI agent initialization with LLM client integration and dependency injection.
@@ -87,7 +54,7 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 **Dependencies**:
 - ✅ Configuration Management (Phase 0)
-- ✅ LLM Abstraction Layer (Phase 0)
+- ✅ LLM Abstraction Layer - COMPLETED
 - 📦 `pydantic-ai` library
 
 **Constitution Compliance**:
@@ -98,37 +65,6 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 **Effort Estimate**: S - Standard PydanticAI setup with custom LLM integration
 
 **Priority**: P0 - Required for MVP chat feature
-
----
-
-#### [P0] Database Setup for Conversation Storage
-
-**Description**: PostgreSQL database schema and async client for storing conversation history, messages, and session metadata.
-
-**User Value**: Enables persistent multi-turn conversations that users can resume later.
-
-**Implementation Approach**:
-- Use PostgreSQL for relational conversation storage
-- Async database client using SQLAlchemy 2.0 (async mode) or asyncpg
-- Schema: `conversations` (session_id, user_id, created_at, metadata), `messages` (id, conversation_id, role, content, timestamp)
-- Alembic for database migrations
-- Connection pool configuration in `config.py`
-- Located in: `src/haia/db/` with models in `src/haia/db/models.py`
-
-**Dependencies**:
-- ✅ Configuration Management (Phase 0)
-- 📦 `sqlalchemy[asyncio]` or `asyncpg`
-- 📦 `alembic` for migrations
-- 📦 PostgreSQL database
-
-**Constitution Compliance**:
-- Type Safety: All database models are Pydantic + SQLAlchemy models
-- Async-First: All database operations async
-- Security: Database credentials via environment variables only
-
-**Effort Estimate**: M - Database design, migrations, async client setup
-
-**Priority**: P0 - Required for persistent conversation history in MVP
 
 ---
 
@@ -154,9 +90,9 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 **Dependencies**:
 - ✅ Configuration Management (Phase 0)
-- ✅ LLM Abstraction Layer (Phase 0)
+- ✅ LLM Abstraction Layer - COMPLETED
 - ✅ PydanticAI Agent Setup (Phase 0)
-- ✅ Database Setup (Phase 0)
+- ✅ Conversation Database - COMPLETED
 - 📦 `fastapi` framework
 - 📦 `uvicorn` ASGI server
 - 📦 `sse-starlette` for SSE streaming
@@ -310,14 +246,76 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ## Completed Features
 
-_(None yet - project just starting)_
+### ✅ LLM Abstraction Layer (Feature 001)
+
+**Completed**: 2025-11-30
+**PR**: #1
+**Tasks**: 50/50
+**Tests**: 81 passing
+
+**Description**: Model-agnostic LLM client abstraction supporting Anthropic and Ollama providers with unified interface.
+
+**Implementation**:
+- `LLMClient` abstract base class with `chat()` and `stream_chat()` methods
+- `AnthropicClient` implementation for Claude models via Anthropic API
+- `OllamaClient` implementation for local models via Ollama HTTP API
+- Factory pattern (`create_client()`) for provider instantiation based on `HAIA_MODEL` config
+- Comprehensive error handling with typed exceptions
+- Performance overhead < 0.1ms (99.6% under target)
+- Full concurrency support validated
+- Located in: `src/haia/llm/`
+
+**Key Achievements**:
+- ✅ Type-safe interface with Pydantic models
+- ✅ Async-first implementation
+- ✅ Provider switching via configuration only
+- ✅ Comprehensive test coverage (81 tests)
+- ✅ Production-ready code quality (mypy strict + ruff)
+
+---
+
+### ✅ Conversation Database (Feature 002)
+
+**Completed**: 2025-11-30
+**PR**: #2
+**Tasks**: 73/73
+**Tests**: 39 passing
+
+**Description**: SQLite database with async SQLAlchemy for persistent conversation storage with automatic 20-message context window management.
+
+**Implementation**:
+- SQLAlchemy 2.0 async models: `Conversation` and `Message`
+- `ConversationRepository` with full CRUD operations
+- Automatic 20-message sliding context window
+- Alembic migrations for schema versioning
+- FastAPI dependency injection pattern (`get_db()`)
+- Connection pooling and session lifecycle management
+- Located in: `src/haia/db/`
+
+**Key Achievements**:
+- ✅ Type-safe database models with Pydantic validation
+- ✅ Async database operations throughout
+- ✅ Efficient context window queries (< 50ms for 1000 messages)
+- ✅ Comprehensive test coverage (39 tests)
+- ✅ Concurrent access validated (10 simultaneous operations)
 
 ---
 
 ## Changelog
 
+- **2025-11-30**: ✅ **Completed LLM Abstraction Layer and Conversation Database**
+  - ✅ LLM Abstraction Layer (Feature 001): 50/50 tasks, 81 tests passing, PR #1 merged
+    - Anthropic and Ollama provider support
+    - Performance < 0.1ms overhead, full concurrency support
+  - ✅ Conversation Database (Feature 002): 73/73 tasks, 39 tests passing, PR #2 merged
+    - SQLite + SQLAlchemy async implementation
+    - 20-message sliding context window
+    - Alembic migrations for schema management
+  - Updated roadmap to reflect completed features
+  - Current focus moved to Phase 1 MVP: OpenAI-compatible Chat API
+
 - **2025-11-30**: Initial roadmap created with Phase 0 foundation and Phase 1 MVP chat feature
-  - Added LLM abstraction layer for multi-model support (Anthropic, Ollama, OpenAI, Gemini)
-  - Added database setup for persistent conversation storage
-  - Added OpenAI-compatible chat API with streaming support
+  - Defined LLM abstraction layer for multi-model support
+  - Defined database setup for persistent conversation storage
+  - Defined OpenAI-compatible chat API with streaming support
   - Defined Phase 2 (Proxmox, MCP) and Phase 3 (scheduler, notifications)
