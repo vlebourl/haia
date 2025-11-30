@@ -174,6 +174,7 @@ All configuration managed through `pydantic-settings` with environment variables
 
 ## Active Technologies
 - N/A (stateless client, no persistence in this layer) (001-llm-abstraction)
+- SQLite database file (configurable location via `DATABASE_URL` environment variable) (002-conversation-db)
 
 ## Recent Changes
 - 001-llm-abstraction: Added Python 3.11+
