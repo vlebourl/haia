@@ -3,17 +3,23 @@
 Implements OpenAI-compatible /v1/chat/completions endpoint for HAIA.
 """
 
+import json
 import logging
+import uuid
+from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic_ai import Agent
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from haia.api.deps import get_agent, get_correlation_id, get_db
 from haia.api.models.chat import (
+    ChatCompletionChunk,
     ChatCompletionRequest,
     ChatCompletionResponse,
     ChatMessage,
+    TokenUsage,
 )
 from haia.db.repository import ConversationRepository
 
@@ -22,18 +28,155 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def stream_chat_response(
+    request: ChatCompletionRequest,
+    agent: Agent,
+    db: AsyncSession,
+    correlation_id: str,
+) -> AsyncGenerator[str, None]:
+    """Stream chat completion response as Server-Sent Events.
+
+    Args:
+        request: Chat completion request
+        agent: PydanticAI agent instance
+        db: Database session
+        correlation_id: Correlation ID for tracing
+
+    Yields:
+        SSE-formatted chunk strings with data: prefix
+
+    Note:
+        Handles graceful disconnection and saves accumulated response to database.
+    """
+    chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+    accumulated_content = ""
+    prompt_tokens = 0
+    completion_tokens = 0
+
+    try:
+        # Initialize conversation repository
+        repo = ConversationRepository(db)
+
+        # Create conversation
+        conversation = await repo.create_conversation()
+        conversation_id = conversation.id
+
+        logger.debug(f"[{correlation_id}] Created conversation ID: {conversation_id}")
+
+        # Save user messages to database
+        for msg in request.messages:
+            await repo.add_message(conversation_id, msg.role, msg.content)
+
+        # Get context messages
+        context_messages = await repo.get_context_messages(conversation_id, limit=20)
+
+        # Convert to agent format
+        agent_messages = [
+            {"role": msg.role, "content": msg.content}
+            for msg in context_messages
+        ]
+
+        # Calculate prompt tokens
+        prompt_tokens = sum(len(msg["content"].split()) for msg in agent_messages)
+
+        # Send first chunk with role
+        first_chunk = ChatCompletionChunk.from_delta(
+            content="",
+            model=request.model,
+            chunk_id=chunk_id,
+            role="assistant",
+        )
+        yield f"data: {first_chunk.model_dump_json()}\n\n"
+
+        # Stream agent response
+        async for content_delta in agent.run_stream(
+            user_prompt=agent_messages[-1]["content"],
+            message_history=agent_messages[:-1],
+        ):
+            accumulated_content += content_delta
+            completion_tokens = len(accumulated_content.split())
+
+            # Create and send chunk
+            chunk = ChatCompletionChunk.from_delta(
+                content=content_delta,
+                model=request.model,
+                chunk_id=chunk_id,
+            )
+            yield f"data: {chunk.model_dump_json()}\n\n"
+
+        # Send final chunk with usage statistics
+        final_chunk = ChatCompletionChunk.create_final_chunk(
+            model=request.model,
+            chunk_id=chunk_id,
+            usage=TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+            ),
+        )
+        yield f"data: {final_chunk.model_dump_json()}\n\n"
+
+        # Send [DONE] marker
+        yield "data: [DONE]\n\n"
+
+        # Save accumulated response to database
+        await repo.add_message(conversation_id, "assistant", accumulated_content)
+        await db.commit()
+
+        logger.info(
+            f"[{correlation_id}] Streaming complete: "
+            f"conversation_id={conversation_id}, tokens={prompt_tokens + completion_tokens}"
+        )
+
+    except GeneratorExit:
+        # Client disconnected - save what we have
+        logger.warning(
+            f"[{correlation_id}] Client disconnected during streaming. "
+            f"Accumulated {len(accumulated_content)} characters."
+        )
+        # Attempt to save partial response
+        try:
+            if accumulated_content:
+                await repo.add_message(conversation_id, "assistant", accumulated_content)
+                await db.commit()
+        except Exception as save_error:
+            logger.error(f"[{correlation_id}] Failed to save partial response: {save_error}")
+        raise
+
+    except Exception as e:
+        # Error during streaming
+        logger.error(
+            f"[{correlation_id}] Error during streaming: {e}",
+            exc_info=True,
+        )
+        # Send error as final chunk (OpenAI-compatible error handling)
+        error_chunk = {
+            "id": chunk_id,
+            "object": "chat.completion.chunk",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {},
+                    "finish_reason": "error",
+                }
+            ],
+        }
+        yield f"data: {json.dumps(error_chunk)}\n\n"
+        yield "data: [DONE]\n\n"
+        await db.rollback()
+
+
 @router.post(
     "/v1/chat/completions",
-    response_model=ChatCompletionResponse,
     summary="Create chat completion",
-    description="OpenAI-compatible chat completions endpoint for HAIA",
+    description="OpenAI-compatible chat completions endpoint for HAIA (streaming and non-streaming)",
 )
 async def chat_completions(
     request: ChatCompletionRequest,
     agent: Agent = Depends(get_agent),
     db: AsyncSession = Depends(get_db),
     correlation_id: str = Depends(get_correlation_id),
-) -> ChatCompletionResponse:
+):
     """Process chat completion request with HAIA agent.
 
     Args:
@@ -43,7 +186,7 @@ async def chat_completions(
         correlation_id: Correlation ID for request tracing
 
     Returns:
-        ChatCompletionResponse with assistant's response
+        ChatCompletionResponse for non-streaming, StreamingResponse for streaming
 
     Raises:
         HTTPException: If conversation not found or LLM error occurs
@@ -55,10 +198,15 @@ async def chat_completions(
 
     # Check streaming mode
     if request.stream:
-        # TODO: Implement streaming in User Story 2 (Phase 4)
-        raise HTTPException(
-            status_code=501,
-            detail="Streaming not yet implemented - will be available in User Story 2",
+        # Return SSE streaming response
+        return StreamingResponse(
+            stream_chat_response(request, agent, db, correlation_id),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+            },
         )
 
     try:

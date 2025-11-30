@@ -41,19 +41,19 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T008 Create ChatMessage model in src/haia/api/models/chat.py (base for all request/response)
-- [ ] T009 [P] Create ErrorDetail and ErrorResponse models in src/haia/api/models/errors.py
-- [ ] T010 [P] Create TokenUsage model in src/haia/api/models/chat.py
-- [ ] T011 Create system prompt constant in src/haia/agent.py (HOMELAB_ASSISTANT_PROMPT)
-- [ ] T012 Implement create_agent() function in src/haia/agent.py (PydanticAI agent initialization)
-- [ ] T013 Implement get_agent() dependency in src/haia/api/deps.py (global agent instance)
-- [ ] T014 [P] Implement correlation ID context var in src/haia/api/deps.py (ContextVar setup)
-- [ ] T015 [P] Implement get_correlation_id() dependency in src/haia/api/deps.py
-- [ ] T016 Create FastAPI app instance in src/haia/api/app.py with startup/shutdown handlers
-- [ ] T017 Configure CORS middleware in src/haia/api/app.py
-- [ ] T018 Create main.py entry point in src/haia/main.py for uvicorn launcher
-- [ ] T019 [P] Write unit tests for agent initialization in tests/unit/api/test_agent.py
-- [ ] T020 [P] Write unit tests for dependency injection in tests/unit/api/test_deps.py
+- [X] T008 Create ChatMessage model in src/haia/api/models/chat.py (base for all request/response)
+- [X] T009 [P] Create ErrorDetail and ErrorResponse models in src/haia/api/models/errors.py
+- [X] T010 [P] Create TokenUsage model in src/haia/api/models/chat.py
+- [X] T011 Create system prompt constant in src/haia/agent.py (HOMELAB_ASSISTANT_PROMPT)
+- [X] T012 Implement create_agent() function in src/haia/agent.py (PydanticAI agent initialization)
+- [X] T013 Implement get_agent() dependency in src/haia/api/deps.py (global agent instance)
+- [X] T014 [P] Implement correlation ID context var in src/haia/api/deps.py (ContextVar setup)
+- [X] T015 [P] Implement get_correlation_id() dependency in src/haia/api/deps.py
+- [X] T016 Create FastAPI app instance in src/haia/api/app.py with startup/shutdown handlers
+- [X] T017 Configure CORS middleware in src/haia/api/app.py
+- [X] T018 Create main.py entry point in src/haia/main.py for uvicorn launcher
+- [X] T019 [P] Write unit tests for agent initialization in tests/unit/api/test_agent.py
+- [X] T020 [P] Write unit tests for dependency injection in tests/unit/api/test_deps.py
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -69,23 +69,23 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T021 [P] [US1] Contract test for /v1/chat/completions non-streaming in tests/contract/test_openai_compatibility.py
-- [ ] T022 [P] [US1] Integration test for basic chat flow in tests/integration/api/test_chat_flow.py
-- [ ] T023 [P] [US1] Unit test for ChatCompletionRequest validation in tests/unit/api/test_models.py
+- [X] T021 [P] [US1] Contract test for /v1/chat/completions non-streaming in tests/contract/test_openai_compatibility.py
+- [X] T022 [P] [US1] Integration test for basic chat flow in tests/integration/api/test_chat_flow.py
+- [X] T023 [P] [US1] Unit test for ChatCompletionRequest validation in tests/unit/api/test_models.py
 
 ### Implementation for User Story 1
 
-- [ ] T024 [P] [US1] Create ChatCompletionRequest model in src/haia/api/models/chat.py (with validation)
-- [ ] T025 [P] [US1] Create Choice model in src/haia/api/models/chat.py
-- [ ] T026 [P] [US1] Create ChatCompletionResponse model with factory method in src/haia/api/models/chat.py
-- [ ] T027 [US1] Create /v1/chat/completions POST endpoint in src/haia/api/routes/chat.py (non-streaming only)
-- [ ] T028 [US1] Implement chat_completions() handler function with agent.run() integration
-- [ ] T029 [US1] Add request validation and error handling to chat endpoint
-- [ ] T030 [US1] Implement conversation creation in chat handler (use ConversationRepository)
-- [ ] T031 [US1] Implement user message saving to database in chat handler
-- [ ] T032 [US1] Implement assistant response saving to database in chat handler
-- [ ] T033 [US1] Add correlation ID logging to chat requests
-- [ ] T034 [US1] Register chat router in src/haia/api/app.py
+- [X] T024 [P] [US1] Create ChatCompletionRequest model in src/haia/api/models/chat.py (with validation)
+- [X] T025 [P] [US1] Create Choice model in src/haia/api/models/chat.py
+- [X] T026 [P] [US1] Create ChatCompletionResponse model with factory method in src/haia/api/models/chat.py
+- [X] T027 [US1] Create /v1/chat/completions POST endpoint in src/haia/api/routes/chat.py (non-streaming only)
+- [X] T028 [US1] Implement chat_completions() handler function with agent.run() integration
+- [X] T029 [US1] Add request validation and error handling to chat endpoint
+- [X] T030 [US1] Implement conversation creation in chat handler (use ConversationRepository)
+- [X] T031 [US1] Implement user message saving to database in chat handler
+- [X] T032 [US1] Implement assistant response saving to database in chat handler
+- [X] T033 [US1] Add correlation ID logging to chat requests
+- [X] T034 [US1] Register chat router in src/haia/api/app.py
 
 **Checkpoint**: At this point, User Story 1 should be fully functional - can send chat request, get response, conversation persisted
 
@@ -99,21 +99,21 @@
 
 ### Tests for User Story 2
 
-- [ ] T035 [P] [US2] Integration test for SSE streaming in tests/integration/api/test_streaming.py
-- [ ] T036 [P] [US2] Test client disconnection handling in tests/integration/api/test_streaming.py
-- [ ] T037 [P] [US2] Unit test for streaming chunk models in tests/unit/api/test_models.py
+- [X] T035 [P] [US2] Integration test for SSE streaming in tests/integration/api/test_streaming.py
+- [X] T036 [P] [US2] Test client disconnection handling in tests/integration/api/test_streaming.py
+- [X] T037 [P] [US2] Unit test for streaming chunk models in tests/unit/api/test_models.py
 
 ### Implementation for User Story 2
 
-- [ ] T038 [P] [US2] Create MessageDelta model in src/haia/api/models/chat.py
-- [ ] T039 [P] [US2] Create ChoiceDelta model in src/haia/api/models/chat.py
-- [ ] T040 [P] [US2] Create ChatCompletionChunk model with factory methods in src/haia/api/models/chat.py
-- [ ] T041 [US2] Implement stream_chat_response() async generator in src/haia/api/routes/chat.py
-- [ ] T042 [US2] Add SSE response handling to chat_completions() endpoint (check request.stream)
-- [ ] T043 [US2] Implement chunk collection for database save in stream generator
-- [ ] T044 [US2] Add final chunk with usage stats and finish_reason to stream
-- [ ] T045 [US2] Implement graceful disconnection handling in stream generator
-- [ ] T046 [US2] Add SSE event formatting (data: prefix, [DONE] terminator)
+- [X] T038 [P] [US2] Create MessageDelta model in src/haia/api/models/chat.py
+- [X] T039 [P] [US2] Create ChoiceDelta model in src/haia/api/models/chat.py
+- [X] T040 [P] [US2] Create ChatCompletionChunk model with factory methods in src/haia/api/models/chat.py
+- [X] T041 [US2] Implement stream_chat_response() async generator in src/haia/api/routes/chat.py
+- [X] T042 [US2] Add SSE response handling to chat_completions() endpoint (check request.stream)
+- [X] T043 [US2] Implement chunk collection for database save in stream generator
+- [X] T044 [US2] Add final chunk with usage stats and finish_reason to stream
+- [X] T045 [US2] Implement graceful disconnection handling in stream generator
+- [X] T046 [US2] Add SSE event formatting (data: prefix, [DONE] terminator)
 
 **Checkpoint**: At this point, both non-streaming and streaming modes work - User Stories 1 AND 2 are functional
 

@@ -165,3 +165,137 @@ class ChatCompletionResponse(BaseModel):
                 total_tokens=prompt_tokens + completion_tokens,
             ),
         )
+
+
+class MessageDelta(BaseModel):
+    """Delta content in a streaming chunk (OpenAI format)."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "role": "assistant",
+                "content": "Proxmox ",
+            }
+        }
+    )
+
+    role: str | None = Field(None, description="Message role (only in first chunk)")
+    content: str | None = Field(None, description="Incremental content delta")
+
+
+class ChoiceDelta(BaseModel):
+    """A single choice delta in a streaming chunk (OpenAI format)."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "index": 0,
+                "delta": {"content": "Proxmox "},
+                "finish_reason": None,
+            }
+        }
+    )
+
+    index: int = Field(..., ge=0, description="Choice index (0 for single response)")
+    delta: MessageDelta = Field(..., description="Incremental message delta")
+    finish_reason: Literal["stop", "length", "content_filter"] | None = Field(
+        None, description="Reason completion finished (only in last chunk)"
+    )
+
+
+class ChatCompletionChunk(BaseModel):
+    """Streaming chunk model for SSE responses (OpenAI format)."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "chatcmpl-123",
+                "object": "chat.completion.chunk",
+                "created": 1677652288,
+                "model": "haia",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": "Proxmox "},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+        }
+    )
+
+    id: str = Field(..., description="Unique completion ID (same for all chunks)")
+    object: Literal["chat.completion.chunk"] = Field(
+        "chat.completion.chunk", description="Object type (always 'chat.completion.chunk')"
+    )
+    created: int = Field(..., description="Unix timestamp of creation")
+    model: str = Field(..., description="Model used for completion")
+    choices: list[ChoiceDelta] = Field(..., description="Array of delta choices")
+    usage: TokenUsage | None = Field(None, description="Token usage (only in final chunk)")
+
+    @classmethod
+    def from_delta(
+        cls,
+        content: str,
+        model: str,
+        chunk_id: str,
+        finish_reason: Literal["stop", "length", "content_filter"] | None = None,
+        role: str | None = None,
+    ) -> "ChatCompletionChunk":
+        """Factory method to create chunk from content delta.
+
+        Args:
+            content: Incremental content to send
+            model: Model identifier
+            chunk_id: Unique ID for this completion (same across all chunks)
+            finish_reason: Completion finish reason (only for final chunk)
+            role: Message role (only for first chunk)
+
+        Returns:
+            ChatCompletionChunk instance
+        """
+        return cls(
+            id=chunk_id,
+            object="chat.completion.chunk",
+            created=int(time.time()),
+            model=model,
+            choices=[
+                ChoiceDelta(
+                    index=0,
+                    delta=MessageDelta(role=role, content=content),
+                    finish_reason=finish_reason,
+                )
+            ],
+        )
+
+    @classmethod
+    def create_final_chunk(
+        cls,
+        model: str,
+        chunk_id: str,
+        usage: TokenUsage,
+    ) -> "ChatCompletionChunk":
+        """Factory method to create final chunk with usage stats.
+
+        Args:
+            model: Model identifier
+            chunk_id: Unique ID for this completion
+            usage: Token usage statistics
+
+        Returns:
+            ChatCompletionChunk with finish_reason and usage
+        """
+        return cls(
+            id=chunk_id,
+            object="chat.completion.chunk",
+            created=int(time.time()),
+            model=model,
+            choices=[
+                ChoiceDelta(
+                    index=0,
+                    delta=MessageDelta(content=""),
+                    finish_reason="stop",
+                )
+            ],
+            usage=usage,
+        )
