@@ -1,0 +1,283 @@
+{
+  "title": "LLMClient Interface Contract",
+  "description": "Abstract interface contract for LLM provider clients. All provider implementations must conform to this contract.",
+  "version": "1.0.0",
+  "interface": {
+    "LLMClient": {
+      "type": "abstract_class",
+      "description": "Abstract base class defining common interface for all LLM providers",
+      "methods": {
+        "chat": {
+          "description": "Send chat messages and receive non-streaming response",
+          "async": true,
+          "parameters": {
+            "messages": {
+              "type": "list[Message]",
+              "required": true,
+              "description": "List of conversation messages (system, user, assistant)"
+            },
+            "temperature": {
+              "type": "float",
+              "required": false,
+              "default": 0.7,
+              "constraints": "0.0 <= value <= 1.0",
+              "description": "Sampling temperature for response generation"
+            },
+            "max_tokens": {
+              "type": "int",
+              "required": false,
+              "default": 1024,
+              "constraints": "value > 0",
+              "description": "Maximum tokens to generate in response"
+            }
+          },
+          "returns": {
+            "type": "LLMResponse",
+            "description": "Unified response containing content, model, and token usage"
+          },
+          "raises": {
+            "AuthenticationError": "API authentication failed",
+            "RateLimitError": "API rate limit exceeded",
+            "TimeoutError": "Request timed out",
+            "ValidationError": "Response validation failed",
+            "ServiceUnavailableError": "Provider service unavailable",
+            "LLMError": "Generic LLM error"
+          }
+        },
+        "stream_chat": {
+          "description": "Send chat messages and receive streaming response (yields chunks)",
+          "async": true,
+          "streaming": true,
+          "parameters": {
+            "messages": {
+              "type": "list[Message]",
+              "required": true,
+              "description": "List of conversation messages"
+            },
+            "temperature": {
+              "type": "float",
+              "required": false,
+              "default": 0.7,
+              "constraints": "0.0 <= value <= 1.0",
+              "description": "Sampling temperature"
+            },
+            "max_tokens": {
+              "type": "int",
+              "required": false,
+              "default": 1024,
+              "constraints": "value > 0",
+              "description": "Maximum tokens to generate"
+            }
+          },
+          "returns": {
+            "type": "AsyncIterator[LLMResponseChunk]",
+            "description": "Async generator yielding response chunks. Final chunk includes finish_reason and usage."
+          },
+          "raises": {
+            "AuthenticationError": "API authentication failed",
+            "RateLimitError": "API rate limit exceeded",
+            "TimeoutError": "Request timed out",
+            "ServiceUnavailableError": "Provider service unavailable",
+            "LLMError": "Generic LLM error"
+          },
+          "notes": "MVP implementation may raise NotImplementedError. Required for post-MVP streaming feature."
+        }
+      }
+    }
+  },
+  "data_models": {
+    "Message": {
+      "description": "Single message in a conversation",
+      "fields": {
+        "role": {
+          "type": "str",
+          "required": true,
+          "constraints": "Must be 'system', 'user', or 'assistant'"
+        },
+        "content": {
+          "type": "str",
+          "required": true,
+          "constraints": "Non-empty string"
+        }
+      }
+    },
+    "LLMResponse": {
+      "description": "Unified response from any LLM provider",
+      "fields": {
+        "content": {
+          "type": "str",
+          "required": true,
+          "constraints": "Non-empty string"
+        },
+        "model": {
+          "type": "str",
+          "required": true,
+          "description": "Provider-specific model identifier"
+        },
+        "usage": {
+          "type": "TokenUsage",
+          "required": true,
+          "description": "Token usage statistics"
+        },
+        "finish_reason": {
+          "type": "str | None",
+          "required": false,
+          "description": "Reason generation stopped: 'stop', 'length', 'tool_calls', etc."
+        }
+      }
+    },
+    "TokenUsage": {
+      "description": "Token usage statistics",
+      "fields": {
+        "prompt_tokens": {
+          "type": "int",
+          "required": true,
+          "constraints": ">= 0"
+        },
+        "completion_tokens": {
+          "type": "int",
+          "required": true,
+          "constraints": ">= 0"
+        },
+        "total_tokens": {
+          "type": "int",
+          "required": true,
+          "constraints": ">= 0"
+        }
+      }
+    },
+    "LLMResponseChunk": {
+      "description": "Single chunk in streaming response",
+      "fields": {
+        "content": {
+          "type": "str",
+          "required": true,
+          "description": "Incremental content"
+        },
+        "finish_reason": {
+          "type": "str | None",
+          "required": false,
+          "description": "Set only on final chunk"
+        },
+        "usage": {
+          "type": "TokenUsage | None",
+          "required": false,
+          "description": "Set only on final chunk"
+        }
+      }
+    }
+  },
+  "error_hierarchy": {
+    "LLMError": {
+      "base": "Exception",
+      "description": "Base exception for all LLM errors",
+      "fields": {
+        "message": "str",
+        "correlation_id": "str",
+        "provider": "str | None",
+        "original_error": "Exception | None",
+        "extra_context": "dict[str, Any]"
+      },
+      "subclasses": {
+        "AuthenticationError": "API authentication failed (401, 403)",
+        "RateLimitError": "API rate limit exceeded (429)",
+        "TimeoutError": "Request timed out",
+        "ValidationError": "Response validation failed",
+        "ServiceUnavailableError": "Provider service unavailable (500, 502, 503)",
+        "ResourceNotFoundError": "Resource not found (404)",
+        "InvalidRequestError": "Invalid request parameters (400)"
+      }
+    }
+  },
+  "factory_function": {
+    "name": "create_client",
+    "description": "Factory function to instantiate appropriate LLM client based on configuration",
+    "signature": "def create_client(config: Settings) -> LLMClient",
+    "parameters": {
+      "config": {
+        "type": "Settings",
+        "description": "Application settings containing HAIA_MODEL and provider credentials"
+      }
+    },
+    "returns": {
+      "type": "LLMClient",
+      "description": "Concrete LLM client instance (AnthropicClient, OllamaClient, etc.)"
+    },
+    "raises": {
+      "ValueError": "Invalid HAIA_MODEL format or unsupported provider"
+    },
+    "behavior": {
+      "model_format": "Expects 'provider:model' format in config.haia_model",
+      "supported_providers": ["anthropic", "ollama", "openai (post-MVP)", "gemini (post-MVP)"],
+      "validation": "Fails fast if provider not supported or required credentials missing"
+    }
+  },
+  "implementation_notes": {
+    "provider_implementations": {
+      "AnthropicClient": {
+        "status": "MVP - Required",
+        "sdk": "anthropic.AsyncAnthropic",
+        "notes": "System prompts are top-level parameter, not message role"
+      },
+      "OllamaClient": {
+        "status": "Post-MVP",
+        "sdk": "httpx.AsyncClient (no official SDK)",
+        "notes": "System prompts are messages with role='system'"
+      },
+      "OpenAIClient": {
+        "status": "Post-MVP",
+        "sdk": "openai.AsyncOpenAI",
+        "notes": "Similar to Anthropic, system prompts as messages"
+      },
+      "GeminiClient": {
+        "status": "Post-MVP",
+        "sdk": "google.generativeai",
+        "notes": "May require different message format"
+      }
+    },
+    "logging": {
+      "requirement": "All LLM API calls must be logged with correlation IDs",
+      "fields": [
+        "correlation_id",
+        "provider",
+        "model",
+        "latency_ms",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "finish_reason",
+        "error_type (if failed)"
+      ],
+      "log_level": "INFO for successful calls, ERROR for failures"
+    },
+    "observability": {
+      "metrics": [
+        "llm_requests_total (counter)",
+        "llm_request_duration_seconds (histogram)",
+        "llm_tokens_total (counter - separate by prompt/completion)",
+        "llm_errors_total (counter - labeled by error_type)"
+      ]
+    }
+  },
+  "backwards_compatibility": {
+    "versioning": "Interface follows semantic versioning. Breaking changes require major version bump.",
+    "deprecation_policy": "Deprecated methods will be marked with warnings for at least one minor version before removal.",
+    "extension_points": {
+      "new_providers": "Add new provider by implementing LLMClient interface. No changes to existing code.",
+      "new_parameters": "Add optional parameters to methods. Existing calls remain valid.",
+      "new_error_types": "New exception subclasses can be added without breaking existing error handlers."
+    }
+  },
+  "testing_requirements": {
+    "unit_tests": {
+      "models": "Test Pydantic validation for all data models",
+      "factory": "Test provider selection logic and error cases",
+      "providers": "Test each provider implementation with mocked APIs",
+      "errors": "Test error mapping from provider-specific to unified errors"
+    },
+    "integration_tests": {
+      "real_apis": "Optional tests with real API calls (requires API keys)",
+      "note": "Integration tests should be marked and skipped in CI if credentials not available"
+    }
+  }
+}
