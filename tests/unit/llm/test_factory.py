@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings
 
 from haia.llm.factory import create_client
 from haia.llm.providers.anthropic import AnthropicClient
+from haia.llm.providers.ollama import OllamaClient
 
 
 class MockSettings(BaseSettings):
@@ -13,6 +14,7 @@ class MockSettings(BaseSettings):
 
     haia_model: str = Field(..., description="Model selection")
     anthropic_api_key: str | None = None
+    ollama_base_url: str | None = None
     llm_timeout: float = 30.0
 
 
@@ -117,18 +119,42 @@ class TestCreateClient:
         assert "unsupported" in str(exc_info.value).lower()
         assert "unknown" in str(exc_info.value).lower()
 
-    def test_ollama_not_implemented(self) -> None:
-        """Test that Ollama provider raises NotImplementedError."""
+    def test_create_ollama_client(self) -> None:
+        """Test creating Ollama client."""
         config = MockSettings(
-            haia_model="ollama:qwen2.5-coder",
-            anthropic_api_key="test-key",
+            haia_model="ollama:qwen2.5-coder:7b",
         )
 
-        with pytest.raises(NotImplementedError) as exc_info:
-            create_client(config)
+        client = create_client(config)
 
-        assert "ollama" in str(exc_info.value).lower()
-        assert "not implemented" in str(exc_info.value).lower()
+        assert isinstance(client, OllamaClient)
+        assert client.model == "qwen2.5-coder:7b"
+        assert client.base_url == "http://localhost:11434"
+        assert client.timeout == 120.0  # Ollama defaults to 120s
+
+    def test_create_ollama_client_custom_base_url(self) -> None:
+        """Test creating Ollama client with custom base URL."""
+        config = MockSettings(
+            haia_model="ollama:llama3.1:8b",
+            ollama_base_url="http://192.168.1.100:11434",
+        )
+
+        client = create_client(config)
+
+        assert isinstance(client, OllamaClient)
+        assert client.model == "llama3.1:8b"
+        assert client.base_url == "http://192.168.1.100:11434"
+
+    def test_create_ollama_client_custom_timeout(self) -> None:
+        """Test creating Ollama client with custom timeout."""
+        config = MockSettings(
+            haia_model="ollama:qwen2.5-coder:7b",
+            llm_timeout=60.0,
+        )
+
+        client = create_client(config)
+
+        assert client.timeout == 60.0
 
     def test_openai_not_implemented(self) -> None:
         """Test that OpenAI provider raises NotImplementedError."""

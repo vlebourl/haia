@@ -82,17 +82,17 @@
 
 ### Implementation for User Story 2
 
-- [ ] T021 [P] [US2] Implement `OllamaClient` in `src/haia/llm/providers/ollama.py`: httpx async client initialization, POST to `/api/chat` endpoint, error mapping from HTTP status codes
-- [ ] T022 [P] [US2] Implement response mapping in `OllamaClient`: convert Ollama JSON to `LLMResponse` model, map `prompt_eval_count`/`eval_count` to token usage, handle system prompts as messages with role="system"
-- [ ] T023 [P] [US2] Implement stub `stream_chat()` method in `OllamaClient`: raise `NotImplementedError`
-- [ ] T024 [US2] Enhance factory function in `src/haia/llm/factory.py`: add "ollama:model" support, validate OLLAMA_BASE_URL config
-- [ ] T025 [US2] Update `src/haia/llm/providers/__init__.py` to export `OllamaClient`
+- [X] T021 [P] [US2] Implement `OllamaClient` in `src/haia/llm/providers/ollama.py`: httpx async client initialization, POST to `/api/chat` endpoint, error mapping from HTTP status codes
+- [X] T022 [P] [US2] Implement response mapping in `OllamaClient`: convert Ollama JSON to `LLMResponse` model, map `prompt_eval_count`/`eval_count` to token usage, handle system prompts as messages with role="system"
+- [X] T023 [P] [US2] Implement stub `stream_chat()` method in `OllamaClient`: raise `NotImplementedError`
+- [X] T024 [US2] Enhance factory function in `src/haia/llm/factory.py`: add "ollama:model" support, validate OLLAMA_BASE_URL config
+- [X] T025 [US2] Update `src/haia/llm/providers/__init__.py` to export `OllamaClient`
 
 ### Tests for User Story 2
 
-- [ ] T026 [P] [US2] Write unit tests for `OllamaClient` in `tests/unit/llm/test_ollama.py`: mock httpx responses, test successful chat, test error mapping, test response conversion
-- [ ] T027 [P] [US2] Write factory tests for Ollama in `tests/unit/llm/test_factory.py`: test Ollama provider selection, test base_url configuration
-- [ ] T028 [US2] Write integration test in `tests/integration/test_llm_providers.py`: test provider switching (initialize both Anthropic and Ollama with same messages, verify identical response format)
+- [X] T026 [P] [US2] Write unit tests for `OllamaClient` in `tests/unit/llm/test_ollama.py`: mock httpx responses, test successful chat, test error mapping, test response conversion
+- [X] T027 [P] [US2] Write factory tests for Ollama in `tests/unit/llm/test_factory.py`: test Ollama provider selection, test base_url configuration
+- [X] T028 [US2] Write integration test in `tests/integration/test_llm_providers.py`: test provider switching (initialize both Anthropic and Ollama with same messages, verify identical response format)
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently - can switch providers via config, responses have identical format
 
@@ -108,16 +108,16 @@
 
 **Note**: Error handling is largely implemented in US1 and US2. This phase validates and enhances error coverage.
 
-- [ ] T029 [P] [US3] Add timeout configuration to `AnthropicClient`: accept timeout parameter, configure Anthropic SDK timeout
-- [ ] T030 [P] [US3] Add timeout configuration to `OllamaClient`: configure httpx client timeout
-- [ ] T031 [P] [US3] Enhance error logging in both clients: ensure all error types include provider, error_type, correlation_id, original_error
-- [ ] T032 [US3] Add response validation in both clients: validate response against expected Pydantic schema, raise `ValidationError` if malformed
+- [X] T029 [P] [US3] Add timeout configuration to `AnthropicClient`: accept timeout parameter, configure Anthropic SDK timeout
+- [X] T030 [P] [US3] Add timeout configuration to `OllamaClient`: configure httpx client timeout
+- [X] T031 [P] [US3] Enhance error logging in both clients: ensure all error types include provider, error_type, correlation_id, original_error
+- [X] T032 [US3] Add response validation in both clients: validate response against expected Pydantic schema, raise `ValidationError` if malformed
 
 ### Tests for User Story 3
 
-- [ ] T033 [P] [US3] Write error scenario tests in `tests/unit/llm/test_anthropic.py`: test AuthenticationError (401), RateLimitError (429), TimeoutError, ValidationError (malformed response)
-- [ ] T034 [P] [US3] Write error scenario tests in `tests/unit/llm/test_ollama.py`: test 404 (model not found), 500 (service error), timeout, malformed JSON
-- [ ] T035 [US3] Write comprehensive error tests in `tests/unit/llm/test_errors.py`: test correlation ID propagation, test error serialization (`to_dict()`), test exception chaining (`raise ... from e`)
+- [X] T033 [P] [US3] Write error scenario tests in `tests/unit/llm/test_anthropic.py`: test AuthenticationError (401), RateLimitError (429), TimeoutError, ValidationError (malformed response)
+- [X] T034 [P] [US3] Write error scenario tests in `tests/unit/llm/test_ollama.py`: test 404 (model not found), 500 (service error), timeout, malformed JSON
+- [X] T035 [US3] Write comprehensive error tests in `tests/unit/llm/test_errors.py`: test correlation ID propagation, test error serialization (`to_dict()`), test exception chaining (`raise ... from e`)
 
 **Checkpoint**: All error scenarios are handled gracefully with informative messages and debugging information
 
@@ -131,15 +131,15 @@
 
 ### Implementation for User Story 4
 
-- [ ] T036 [P] [US4] Verify `stream_chat()` abstract method in `src/haia/llm/client.py`: ensure signature includes `AsyncIterator[LLMResponseChunk]` return type
-- [ ] T037 [P] [US4] Verify `LLMResponseChunk` model in `src/haia/llm/models.py`: ensure fields for incremental content, finish_reason, usage
-- [ ] T038 [P] [US4] Document streaming interface in `src/haia/llm/client.py` docstrings: explain MVP limitation, describe expected behavior when implemented
-- [ ] T039 [US4] Add example of future streaming usage to quickstart.md (in code comments showing it's not implemented yet)
+- [X] T036 [P] [US4] Verify `stream_chat()` abstract method in `src/haia/llm/client.py`: ensure signature includes `AsyncIterator[LLMResponseChunk]` return type
+- [X] T037 [P] [US4] Verify `LLMResponseChunk` model in `src/haia/llm/models.py`: ensure fields for incremental content, finish_reason, usage
+- [X] T038 [P] [US4] Document streaming interface in `src/haia/llm/client.py` docstrings: explain MVP limitation, describe expected behavior when implemented
+- [X] T039 [US4] Add example of future streaming usage to quickstart.md (in code comments showing it's not implemented yet)
 
 ### Tests for User Story 4
 
-- [ ] T040 [P] [US4] Write interface test in `tests/unit/llm/test_client.py`: verify `stream_chat()` method exists on abstract class, verify correct return type annotation
-- [ ] T041 [US4] Write stub tests for streaming in provider tests: call `stream_chat()`, verify `NotImplementedError` is raised with appropriate message
+- [X] T040 [P] [US4] Write interface test in `tests/unit/llm/test_client.py`: verify `stream_chat()` method exists on abstract class, verify correct return type annotation
+- [X] T041 [US4] Write stub tests for streaming in provider tests: call `stream_chat()`, verify `NotImplementedError` is raised with appropriate message
 
 **Checkpoint**: Streaming interface is defined and documented, ready for post-MVP implementation
 
@@ -149,15 +149,15 @@
 
 **Purpose**: Final improvements, documentation, and validation
 
-- [ ] T042 [P] Run `mypy --strict src/haia/llm/` and fix any type errors
-- [ ] T043 [P] Run `ruff check src/haia/llm/` and fix any linting issues
-- [ ] T044 [P] Run `ruff format src/haia/llm/` to ensure consistent code style
-- [ ] T045 [P] Add comprehensive docstrings to all public classes and methods in `src/haia/llm/`
-- [ ] T046 Validate quickstart.md examples: run example code snippets to ensure they work
-- [ ] T047 [P] Update README.md with LLM abstraction layer usage if needed
-- [ ] T048 Run full test suite: `pytest tests/unit/llm/ -v` and ensure all tests pass
-- [ ] T049 Write performance test: measure abstraction layer overhead (<10ms target)
-- [ ] T050 Write concurrency test: verify multiple simultaneous LLM calls work without conflicts
+- [X] T042 [P] Run `mypy --strict src/haia/llm/` and fix any type errors
+- [X] T043 [P] Run `ruff check src/haia/llm/` and fix any linting issues
+- [X] T044 [P] Run `ruff format src/haia/llm/` to ensure consistent code style
+- [X] T045 [P] Add comprehensive docstrings to all public classes and methods in `src/haia/llm/`
+- [X] T046 Validate quickstart.md examples: run example code snippets to ensure they work
+- [X] T047 [P] Update README.md with LLM abstraction layer usage if needed
+- [X] T048 Run full test suite: `pytest tests/unit/llm/ -v` and ensure all tests pass
+- [X] T049 Write performance test: measure abstraction layer overhead (<10ms target)
+- [X] T050 Write concurrency test: verify multiple simultaneous LLM calls work without conflicts
 
 ---
 

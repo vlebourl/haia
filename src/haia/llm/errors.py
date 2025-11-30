@@ -4,7 +4,6 @@ import contextvars
 import uuid
 from typing import Any
 
-
 # Correlation ID context variable for async-safe tracking
 correlation_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "correlation_id", default=None
@@ -35,6 +34,11 @@ class LLMError(Exception):
         self.provider = provider
         self.original_error = original_error
         self.extra_context = extra_context
+
+    @property
+    def status_code(self) -> int | None:
+        """HTTP status code if applicable."""
+        return self.extra_context.get("status_code")
 
     def __str__(self) -> str:
         parts = [self.message]

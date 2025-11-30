@@ -74,9 +74,7 @@ class AnthropicClient(LLMClient):
                     # Anthropic handles system prompts as top-level parameter
                     system_message = msg.content
                 else:
-                    conversation_messages.append(
-                        {"role": msg.role, "content": msg.content}
-                    )
+                    conversation_messages.append({"role": msg.role, "content": msg.content})
 
             # Call Anthropic API
             response = await self.client.messages.create(
@@ -209,9 +207,7 @@ class AnthropicClient(LLMClient):
             )
             raise error from e
 
-    def _map_response(
-        self, response: anthropic.types.Message
-    ) -> LLMResponse:
+    def _map_response(self, response: anthropic.types.Message) -> LLMResponse:
         """Convert Anthropic response to unified LLMResponse format.
 
         Args:
