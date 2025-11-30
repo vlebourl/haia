@@ -171,3 +171,9 @@ All configuration managed through `pydantic-settings` with environment variables
 - All agent actions must be logged
 - Integration with existing monitoring stack (Prometheus metrics, structured logging)
 - Graceful degradation if LLM is unavailable (cached/static responses for basic queries)
+
+## Active Technologies
+- N/A (stateless client, no persistence in this layer) (001-llm-abstraction)
+
+## Recent Changes
+- 001-llm-abstraction: Added Python 3.11+
