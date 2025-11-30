@@ -133,3 +133,48 @@ class ConversationRepository:
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_context_messages(
+        self, conversation_id: int, limit: int = 20
+    ) -> list[Message]:
+        """Get the N most recent messages for LLM context window.
+
+        Retrieves the most recent messages up to the specified limit, returning
+        them in chronological order (oldest first) for LLM consumption. Uses
+        efficient SQL query with composite index for optimal performance.
+
+        Args:
+            conversation_id: ID of conversation to retrieve messages from
+            limit: Maximum number of messages to retrieve (default: 20)
+
+        Returns:
+            list[Message]: List of messages in chronological order (oldest first),
+                limited to N most recent
+
+        Raises:
+            SQLAlchemyError: If database query fails
+
+        Performance:
+            O(log N + limit) where N is total messages in conversation
+            Uses composite index on (conversation_id, created_at) for fast retrieval
+        """
+        # Query for most recent N messages using ORDER BY DESC + LIMIT
+        # This uses the composite index (conversation_id, created_at) for efficiency
+        stmt = (
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.desc())  # Most recent first
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        messages = list(result.scalars().all())
+
+        # Reverse to return chronological order (oldest first for LLM)
+        messages.reverse()
+
+        logger.debug(
+            f"Retrieved {len(messages)} context messages for conversation {conversation_id} "
+            f"(limit: {limit})"
+        )
+
+        return messages

@@ -99,20 +99,20 @@
 
 ### Tests for User Story 2
 
-- [ ] T035 [P] [US2] Create test_repository.py with get_context_messages unit tests in tests/unit/db/
-- [ ] T036 [P] [US2] Create test_context_window.py integration test for 20-message limit in tests/integration/
-- [ ] T037 [P] [US2] Create test_context_window.py integration test for conversations under 20 messages in tests/integration/
+- [X] T035 [P] [US2] Create test_repository.py with get_context_messages unit tests in tests/unit/db/
+- [X] T036 [P] [US2] Create test_context_window.py integration test for 20-message limit in tests/integration/
+- [X] T037 [P] [US2] Create test_context_window.py integration test for conversations under 20 messages in tests/integration/
 
 ### Implementation for User Story 2
 
-- [ ] T038 [US2] Implement get_context_messages() method with ORDER BY and LIMIT in src/haia/db/repository.py
-- [ ] T039 [US2] Add query optimization using composite index (conversation_id, created_at) in get_context_messages()
-- [ ] T040 [US2] Add message reversal logic to return chronological order (oldest first) in get_context_messages()
-- [ ] T041 [US2] Add configurable limit parameter (default=20) to get_context_messages() method
-- [ ] T042 [US2] Add logging for context window retrieval operations
-- [ ] T043 [US2] Run unit tests and verify context window logic correctness
-- [ ] T044 [US2] Run integration tests with conversations >20 and <20 messages
-- [ ] T045 [US2] Performance test: Verify context retrieval <20ms for 1000-message conversation
+- [X] T038 [US2] Implement get_context_messages() method with ORDER BY and LIMIT in src/haia/db/repository.py
+- [X] T039 [US2] Add query optimization using composite index (conversation_id, created_at) in get_context_messages()
+- [X] T040 [US2] Add message reversal logic to return chronological order (oldest first) in get_context_messages()
+- [X] T041 [US2] Add configurable limit parameter (default=20) to get_context_messages() method
+- [X] T042 [US2] Add logging for context window retrieval operations
+- [X] T043 [US2] Run unit tests and verify context window logic correctness
+- [X] T044 [US2] Run integration tests with conversations >20 and <20 messages
+- [X] T045 [US2] Performance test: Verify context retrieval <20ms for 1000-message conversation
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work - full message persistence with efficient context window queries
 

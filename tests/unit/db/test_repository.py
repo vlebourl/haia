@@ -184,3 +184,102 @@ class TestGetConversation:
 
             assert retrieved is not None
             assert len(retrieved.messages) == 2
+
+
+class TestGetContextMessages:
+    """Tests for get_context_messages method."""
+
+    async def test_get_context_messages_with_limit(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test that get_context_messages respects the limit parameter."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            conversation = await repo.create_conversation()
+
+            # Add 30 messages
+            for i in range(30):
+                await repo.add_message(conversation.id, "user", f"Message {i + 1}")
+
+            await session.commit()
+            conv_id = conversation.id
+
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            # Get context with default limit (20)
+            context = await repo.get_context_messages(conv_id)
+
+            assert len(context) == 20
+            # Should be messages 11-30 (most recent 20)
+            assert context[0].content == "Message 11"
+            assert context[-1].content == "Message 30"
+
+    async def test_get_context_messages_chronological_order(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test that context messages are returned in chronological order (oldest first)."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            conversation = await repo.create_conversation()
+
+            for i in range(25):
+                await repo.add_message(conversation.id, "user", f"Message {i + 1}")
+
+            await session.commit()
+            conv_id = conversation.id
+
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            context = await repo.get_context_messages(conv_id, limit=20)
+
+            # Verify chronological order
+            for i in range(len(context) - 1):
+                assert context[i].created_at <= context[i + 1].created_at
+
+    async def test_get_context_messages_under_limit(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test that get_context_messages returns all messages if under limit."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            conversation = await repo.create_conversation()
+
+            # Add only 10 messages
+            for i in range(10):
+                await repo.add_message(conversation.id, "user", f"Message {i + 1}")
+
+            await session.commit()
+            conv_id = conversation.id
+
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            context = await repo.get_context_messages(conv_id, limit=20)
+
+            # Should return all 10 messages
+            assert len(context) == 10
+            assert context[0].content == "Message 1"
+            assert context[-1].content == "Message 10"
+
+    async def test_get_context_messages_custom_limit(
+        self, async_session: async_sessionmaker[AsyncSession]
+    ) -> None:
+        """Test get_context_messages with custom limit parameter."""
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            conversation = await repo.create_conversation()
+
+            for i in range(50):
+                await repo.add_message(conversation.id, "user", f"Message {i + 1}")
+
+            await session.commit()
+            conv_id = conversation.id
+
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+            # Use custom limit of 10
+            context = await repo.get_context_messages(conv_id, limit=10)
+
+            assert len(context) == 10
+            # Should be messages 41-50 (most recent 10)
+            assert context[0].content == "Message 41"
+            assert context[-1].content == "Message 50"
