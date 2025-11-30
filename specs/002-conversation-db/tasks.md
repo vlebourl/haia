@@ -61,31 +61,31 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T013 [P] [US1] Create test_models.py with Conversation model validation tests in tests/unit/db/
-- [ ] T014 [P] [US1] Create test_models.py with Message model validation tests in tests/unit/db/
-- [ ] T015 [P] [US1] Create test_repository.py with create_conversation unit tests in tests/unit/db/
-- [ ] T016 [P] [US1] Create test_repository.py with add_message unit tests in tests/unit/db/
-- [ ] T017 [P] [US1] Create test_repository.py with get_conversation unit tests in tests/unit/db/
-- [ ] T018 [P] [US1] Create test_db_persistence.py with integration test for message persistence in tests/integration/
+- [X] T013 [P] [US1] Create test_models.py with Conversation model validation tests in tests/unit/db/
+- [X] T014 [P] [US1] Create test_models.py with Message model validation tests in tests/unit/db/
+- [X] T015 [P] [US1] Create test_repository.py with create_conversation unit tests in tests/unit/db/
+- [X] T016 [P] [US1] Create test_repository.py with add_message unit tests in tests/unit/db/
+- [X] T017 [P] [US1] Create test_repository.py with get_conversation unit tests in tests/unit/db/
+- [X] T018 [P] [US1] Create test_db_persistence.py with integration test for message persistence in tests/integration/
 
 ### Implementation for User Story 1
 
-- [ ] T019 [P] [US1] Create Conversation model with id, created_at, updated_at fields in src/haia/db/models.py
-- [ ] T020 [P] [US1] Create Message model with id, conversation_id, role, content, created_at in src/haia/db/models.py
-- [ ] T021 [US1] Add relationship mapping between Conversation and Message models in src/haia/db/models.py
-- [ ] T022 [US1] Add indexes on Conversation (created_at, updated_at) in src/haia/db/models.py
-- [ ] T023 [US1] Add indexes on Message (conversation_id, created_at) in src/haia/db/models.py
-- [ ] T024 [US1] Add composite index on Message (conversation_id, created_at) in src/haia/db/models.py
-- [ ] T025 [P] [US1] Implement create_conversation() method in src/haia/db/repository.py
-- [ ] T026 [P] [US1] Implement get_conversation() method in src/haia/db/repository.py
-- [ ] T027 [P] [US1] Implement add_message() method in src/haia/db/repository.py
-- [ ] T028 [P] [US1] Implement get_all_messages() method in src/haia/db/repository.py
-- [ ] T029 [US1] Add role validation in add_message() method (system/user/assistant)
-- [ ] T030 [US1] Add error handling for missing conversation_id in add_message()
-- [ ] T031 [US1] Generate initial Alembic migration (001_initial_schema.py) for Conversation and Message tables
-- [ ] T032 [US1] Add logging for conversation creation and message persistence operations
-- [ ] T033 [US1] Run unit tests and verify all US1 tests pass
-- [ ] T034 [US1] Run integration tests and verify message persistence across restarts
+- [X] T019 [P] [US1] Create Conversation model with id, created_at, updated_at fields in src/haia/db/models.py
+- [X] T020 [P] [US1] Create Message model with id, conversation_id, role, content, created_at in src/haia/db/models.py
+- [X] T021 [US1] Add relationship mapping between Conversation and Message models in src/haia/db/models.py
+- [X] T022 [US1] Add indexes on Conversation (created_at, updated_at) in src/haia/db/models.py
+- [X] T023 [US1] Add indexes on Message (conversation_id, created_at) in src/haia/db/models.py
+- [X] T024 [US1] Add composite index on Message (conversation_id, created_at) in src/haia/db/models.py
+- [X] T025 [P] [US1] Implement create_conversation() method in src/haia/db/repository.py
+- [X] T026 [P] [US1] Implement get_conversation() method in src/haia/db/repository.py
+- [X] T027 [P] [US1] Implement add_message() method in src/haia/db/repository.py
+- [X] T028 [P] [US1] Implement get_all_messages() method in src/haia/db/repository.py
+- [X] T029 [US1] Add role validation in add_message() method (system/user/assistant)
+- [X] T030 [US1] Add error handling for missing conversation_id in add_message()
+- [X] T031 [US1] Generate initial Alembic migration (001_initial_schema.py) for Conversation and Message tables
+- [X] T032 [US1] Add logging for conversation creation and message persistence operations
+- [X] T033 [US1] Run unit tests and verify all US1 tests pass
+- [X] T034 [US1] Run integration tests and verify message persistence across restarts
 
 **Checkpoint**: At this point, User Story 1 should be fully functional - conversations can be created, messages persisted, and retrieved after application restart
 
