@@ -6,6 +6,7 @@ using async-compatible patterns with Mapped[] type annotations.
 
 from datetime import datetime, timezone
 
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -126,3 +127,134 @@ class Message(Base):
         """String representation of message."""
         preview = self.content[:50] + "..." if len(self.content) > 50 else self.content
         return f"<Message(id={self.id}, role={self.role}, content='{preview}')>"
+
+
+# ============================================================================
+# Pydantic Models (API Contracts)
+# ============================================================================
+
+
+class MessageCreate(BaseModel):
+    """Request schema for creating a new message.
+
+    Used when adding messages to a conversation via API endpoints.
+
+    Attributes:
+        role: Message role (system, user, or assistant)
+        content: Message text content
+
+    Example:
+        ```python
+        message_data = MessageCreate(
+            role="user",
+            content="What is the weather like today?"
+        )
+        ```
+    """
+
+    role: str = Field(
+        ...,
+        description="Message role: 'system', 'user', or 'assistant'",
+        pattern="^(system|user|assistant)$",
+    )
+    content: str = Field(
+        ...,
+        min_length=1,
+        description="Message text content (non-empty)",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "role": "user",
+                "content": "What is the weather like today?",
+            }
+        }
+    )
+
+
+class MessageResponse(BaseModel):
+    """Response schema for message data.
+
+    Returned when retrieving messages from conversations.
+
+    Attributes:
+        id: Unique message identifier
+        role: Message role (system, user, or assistant)
+        content: Message text content
+        created_at: Timestamp when message was created (UTC)
+
+    Example:
+        ```python
+        {
+            "id": 42,
+            "role": "user",
+            "content": "What is the weather like today?",
+            "created_at": "2025-01-15T10:30:00Z"
+        }
+        ```
+    """
+
+    id: int = Field(..., description="Unique message identifier")
+    role: str = Field(..., description="Message role (system/user/assistant)")
+    content: str = Field(..., description="Message text content")
+    created_at: datetime = Field(..., description="Timestamp when message was created (UTC)")
+
+    model_config = ConfigDict(
+        from_attributes=True,  # Enable ORM mode for SQLAlchemy model conversion
+        json_schema_extra={
+            "example": {
+                "id": 42,
+                "role": "user",
+                "content": "What is the weather like today?",
+                "created_at": "2025-01-15T10:30:00Z",
+            }
+        },
+    )
+
+
+class ConversationResponse(BaseModel):
+    """Response schema for conversation data with metadata.
+
+    Returned when retrieving or listing conversations.
+
+    Attributes:
+        id: Unique conversation identifier
+        created_at: Timestamp when conversation was created (UTC)
+        updated_at: Timestamp of last message added (UTC)
+        message_count: Total number of messages in conversation
+        messages: List of messages (optional, only included when fetching full conversation)
+
+    Example:
+        ```python
+        {
+            "id": 1,
+            "created_at": "2025-01-15T10:00:00Z",
+            "updated_at": "2025-01-15T10:30:00Z",
+            "message_count": 5,
+            "messages": [...]  # Only when fetching full conversation
+        }
+        ```
+    """
+
+    id: int = Field(..., description="Unique conversation identifier")
+    created_at: datetime = Field(..., description="Timestamp when conversation was created (UTC)")
+    updated_at: datetime = Field(..., description="Timestamp of last message added (UTC)")
+    message_count: int = Field(0, description="Total number of messages in conversation")
+    messages: list[MessageResponse] = Field(
+        default_factory=list,
+        description="List of messages (only included when fetching full conversation)",
+    )
+
+    model_config = ConfigDict(
+        from_attributes=True,  # Enable ORM mode for SQLAlchemy model conversion
+        json_schema_extra={
+            "example": {
+                "id": 1,
+                "created_at": "2025-01-15T10:00:00Z",
+                "updated_at": "2025-01-15T10:30:00Z",
+                "message_count": 5,
+                "messages": [],
+            }
+        },
+    )

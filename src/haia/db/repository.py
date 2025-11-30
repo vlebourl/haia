@@ -22,6 +22,120 @@ class ConversationRepository:
 
     Args:
         session: AsyncSession for database operations
+
+    Usage Examples:
+        **Basic Conversation Creation:**
+
+        ```python
+        from haia.db import get_db, ConversationRepository
+
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+
+            # Create a new conversation
+            conversation = await repo.create_conversation()
+            print(f"Created conversation ID: {conversation.id}")
+
+            await session.commit()
+        ```
+
+        **Adding Messages to a Conversation:**
+
+        ```python
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+
+            # Add messages to existing conversation
+            await repo.add_message(conversation_id, "system", "You are a helpful assistant.")
+            await repo.add_message(conversation_id, "user", "Hello!")
+            await repo.add_message(conversation_id, "assistant", "Hi! How can I help you?")
+
+            await session.commit()
+        ```
+
+        **Retrieving Conversation with Full History:**
+
+        ```python
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+
+            # Get conversation with all messages
+            conversation = await repo.get_conversation(conversation_id)
+
+            if conversation:
+                print(f"Conversation {conversation.id} has {len(conversation.messages)} messages")
+                for msg in conversation.messages:
+                    print(f"{msg.role}: {msg.content}")
+        ```
+
+        **Context Window Management (20 Most Recent Messages):**
+
+        ```python
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+
+            # Get context window for LLM (default: 20 most recent messages)
+            context = await repo.get_context_messages(conversation_id)
+
+            # Send to LLM
+            llm_messages = [
+                {"role": msg.role, "content": msg.content}
+                for msg in context
+            ]
+        ```
+
+        **Listing Conversations with Pagination:**
+
+        ```python
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+
+            # List conversations (most recent first)
+            conversations = await repo.list_conversations(limit=10, offset=0)
+
+            for conv in conversations:
+                msg_count = await repo.get_message_count(conv.id)
+                print(f"Conversation {conv.id}: {msg_count} messages")
+        ```
+
+        **Deleting Conversations (Cascade):**
+
+        ```python
+        async with async_session() as session:
+            repo = ConversationRepository(session)
+
+            # Delete conversation and all its messages
+            deleted = await repo.delete_conversation(conversation_id)
+
+            if deleted:
+                print("Conversation and all messages deleted")
+                await session.commit()
+        ```
+
+        **FastAPI Integration:**
+
+        ```python
+        from fastapi import Depends
+        from haia.db import get_db, ConversationRepository
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        @app.post("/conversations")
+        async def create_conversation(db: AsyncSession = Depends(get_db)):
+            repo = ConversationRepository(db)
+            conversation = await repo.create_conversation()
+            return {"id": conversation.id, "created_at": conversation.created_at}
+
+        @app.post("/conversations/{conversation_id}/messages")
+        async def add_message(
+            conversation_id: int,
+            role: str,
+            content: str,
+            db: AsyncSession = Depends(get_db),
+        ):
+            repo = ConversationRepository(db)
+            message = await repo.add_message(conversation_id, role, content)
+            return {"id": message.id, "role": message.role, "content": message.content}
+        ```
     """
 
     VALID_ROLES = {"system", "user", "assistant"}
