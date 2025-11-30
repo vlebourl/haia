@@ -25,11 +25,11 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create database module directory structure (src/haia/db/ with __init__.py)
-- [ ] T002 Add database dependencies to pyproject.toml (sqlalchemy[asyncio]>=2.0, aiosqlite>=0.17, alembic>=1.12)
-- [ ] T003 [P] Initialize Alembic in src/haia/db/migrations/ directory
-- [ ] T004 [P] Configure Alembic alembic.ini with SQLite async URL
-- [ ] T005 [P] Update Alembic env.py for async migrations support
+- [X] T001 Create database module directory structure (src/haia/db/ with __init__.py)
+- [X] T002 Add database dependencies to pyproject.toml (sqlalchemy[asyncio]>=2.0, aiosqlite>=0.17, alembic>=1.12)
+- [X] T003 [P] Initialize Alembic in src/haia/db/migrations/ directory
+- [X] T004 [P] Configure Alembic alembic.ini with SQLite async URL
+- [X] T005 [P] Update Alembic env.py for async migrations support
 
 ---
 
@@ -39,13 +39,13 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T006 Create Base declarative model class in src/haia/db/models.py
-- [ ] T007 Setup async database engine creation in src/haia/db/session.py
-- [ ] T008 Create async_sessionmaker factory in src/haia/db/session.py
-- [ ] T009 Implement get_db() FastAPI dependency function in src/haia/db/session.py
-- [ ] T010 Create ConversationRepository class skeleton in src/haia/db/repository.py
-- [ ] T011 Export public API from src/haia/db/__init__.py (get_db, Base, Repository)
-- [ ] T012 Add DATABASE_URL to src/haia/config.py Settings class
+- [X] T006 Create Base declarative model class in src/haia/db/models.py
+- [X] T007 Setup async database engine creation in src/haia/db/session.py
+- [X] T008 Create async_sessionmaker factory in src/haia/db/session.py
+- [X] T009 Implement get_db() FastAPI dependency function in src/haia/db/session.py
+- [X] T010 Create ConversationRepository class skeleton in src/haia/db/repository.py
+- [X] T011 Export public API from src/haia/db/__init__.py (get_db, Base, Repository)
+- [X] T012 Add DATABASE_URL to src/haia/config.py Settings class
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 

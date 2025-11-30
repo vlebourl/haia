@@ -9,6 +9,9 @@ dependencies = [
     "pydantic-settings>=2.0",
     "httpx>=0.25",
     "anthropic>=0.40",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.17",
+    "alembic>=1.12",
 ]
 
 [project.optional-dependencies]
