@@ -28,12 +28,8 @@ class TokenUsage(BaseModel):
     """Token usage statistics from LLM API call."""
 
     prompt_tokens: int = Field(..., description="Tokens in the input prompt", ge=0)
-    completion_tokens: int = Field(
-        ..., description="Tokens in the generated completion", ge=0
-    )
-    total_tokens: int = Field(
-        ..., description="Total tokens used (prompt + completion)", ge=0
-    )
+    completion_tokens: int = Field(..., description="Tokens in the generated completion", ge=0)
+    total_tokens: int = Field(..., description="Total tokens used (prompt + completion)", ge=0)
 
     @property
     def cost_estimate(self) -> float:
@@ -49,9 +45,7 @@ class TokenUsage(BaseModel):
 
     model_config = {
         "json_schema_extra": {
-            "examples": [
-                {"prompt_tokens": 47, "completion_tokens": 65, "total_tokens": 112}
-            ]
+            "examples": [{"prompt_tokens": 47, "completion_tokens": 65, "total_tokens": 112}]
         }
     }
 
@@ -92,9 +86,7 @@ class LLMResponseChunk(BaseModel):
     finish_reason: str | None = Field(
         None, description="Only set on final chunk: 'stop', 'length', etc."
     )
-    usage: TokenUsage | None = Field(
-        None, description="Only set on final chunk: final token usage"
-    )
+    usage: TokenUsage | None = Field(None, description="Only set on final chunk: final token usage")
 
     model_config = {
         "json_schema_extra": {
