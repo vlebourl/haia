@@ -1,15 +1,11 @@
-"""FastAPI dependency injection for database sessions, agent, and correlation IDs."""
+"""FastAPI dependency injection for agent and correlation IDs."""
 
 import logging
 import uuid
 from contextvars import ContextVar
-from typing import AsyncGenerator
 
 from fastapi import Header
 from pydantic_ai import Agent
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from haia.db.session import get_db as _get_db
 
 # Correlation ID context variable for request tracing
 correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="unknown")
@@ -66,14 +62,3 @@ def set_agent(agent: Agent) -> None:
     """
     global _agent
     _agent = agent
-
-
-# Re-export get_db from db.session for convenience
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency for database sessions.
-
-    Yields:
-        Database session with automatic commit/rollback
-    """
-    async for session in _get_db():
-        yield session
