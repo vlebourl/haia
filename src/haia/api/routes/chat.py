@@ -88,21 +88,22 @@ async def stream_chat_response(
         )
         yield f"data: {first_chunk.model_dump_json()}\n\n"
 
-        # Stream agent response
-        async for content_delta in agent.run_stream(
+        # Stream agent response using PydanticAI's streaming API
+        async with agent.run_stream(
             user_prompt=agent_messages[-1]["content"],
             message_history=agent_messages[:-1],
-        ):
-            accumulated_content += content_delta
-            completion_tokens = len(accumulated_content.split())
+        ) as result:
+            async for content_delta in result.stream_text(delta=True):
+                accumulated_content += content_delta
+                completion_tokens = len(accumulated_content.split())
 
-            # Create and send chunk
-            chunk = ChatCompletionChunk.from_delta(
-                content=content_delta,
-                model=request.model,
-                chunk_id=chunk_id,
-            )
-            yield f"data: {chunk.model_dump_json()}\n\n"
+                # Create and send chunk
+                chunk = ChatCompletionChunk.from_delta(
+                    content=content_delta,
+                    model=request.model,
+                    chunk_id=chunk_id,
+                )
+                yield f"data: {chunk.model_dump_json()}\n\n"
 
         # Send final chunk with usage statistics
         final_chunk = ChatCompletionChunk.create_final_chunk(
@@ -249,8 +250,8 @@ async def chat_completions(
             message_history=agent_messages[:-1],  # Previous messages are history
         )
 
-        # Extract response content
-        assistant_content = result.data
+        # Extract response content (PydanticAI uses .output, not .data)
+        assistant_content = result.output
 
         logger.info(
             f"[{correlation_id}] Agent returned response: "

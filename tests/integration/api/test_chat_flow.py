@@ -44,7 +44,7 @@ class TestBasicChatFlow:
         agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "Proxmox VE is an open-source virtualization platform for running VMs and containers."
+        mock_result.output = "Proxmox VE is an open-source virtualization platform for running VMs and containers."
         agent.run = mocker.AsyncMock(return_value=mock_result)
 
         # Send chat request
@@ -74,7 +74,7 @@ class TestBasicChatFlow:
         agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "Docker is a containerization platform."
+        mock_result.output = "Docker is a containerization platform."
         agent.run = mocker.AsyncMock(return_value=mock_result)
 
         # Send request with conversation ID
@@ -119,7 +119,7 @@ class TestBasicChatFlow:
         agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "Yes, Docker uses containerization."
+        mock_result.output ="Yes, Docker uses containerization."
         agent.run = mocker.AsyncMock(return_value=mock_result)
 
         conversation_id = "test-conv-history"
@@ -138,7 +138,7 @@ class TestBasicChatFlow:
         )
 
         # Second message in same conversation
-        mock_result.data = "Containers are isolated application environments."
+        mock_result.output ="Containers are isolated application environments."
         response = client.post(
             "/v1/chat/completions",
             json={
@@ -166,7 +166,7 @@ class TestBasicChatFlow:
         agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "Test response"
+        mock_result.output ="Test response"
         agent.run = mocker.AsyncMock(return_value=mock_result)
 
         correlation_id = "test-correlation-123"
@@ -194,7 +194,7 @@ class TestBasicChatFlow:
         agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "This is a response."
+        mock_result.output ="This is a response."
         agent.run = mocker.AsyncMock(return_value=mock_result)
 
         response = client.post(
@@ -221,7 +221,7 @@ class TestBasicChatFlow:
         agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "Complete response."
+        mock_result.output ="Complete response."
         agent.run = mocker.AsyncMock(return_value=mock_result)
 
         response = client.post(
