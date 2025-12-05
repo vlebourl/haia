@@ -24,8 +24,8 @@ class TestAgentInitialization:
 
         agent = create_agent("test:model")
 
-        # Agent should have the homelab assistant prompt
-        assert agent.system_prompt == HOMELAB_ASSISTANT_PROMPT
+        # Agent should have the homelab assistant prompt in its _system_prompts tuple
+        assert HOMELAB_ASSISTANT_PROMPT in agent._system_prompts
 
     def test_system_prompt_contains_homelab_keywords(self):
         """Test that system prompt mentions key homelab technologies."""

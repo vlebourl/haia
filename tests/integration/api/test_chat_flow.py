@@ -10,18 +10,17 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 async def client(mocker):
-    """Create test client with real database but mocked LLM."""
+    """Create test client with real database but mocked PydanticAI model."""
     # Initialize real database for integration testing
     from haia.db.session import init_db, close_db
     await init_db()
 
-    # Mock only the LLM client to avoid external API calls
-    mock_llm_client = mocker.Mock()
-    mocker.patch("haia.api.app.create_client", return_value=mock_llm_client)
+    # Mock PydanticAI model inference to avoid external API calls
+    mocker.patch("pydantic_ai.models.infer_model")
 
-    # Create real agent with mocked client
+    # Create real agent with mocked model
     from haia.agent import create_agent
-    agent = create_agent(mock_llm_client)
+    agent = create_agent("test:model")
     mocker.patch("haia.api.app.create_agent", return_value=agent)
 
     # Import app after mocking
