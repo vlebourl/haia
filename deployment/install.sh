@@ -21,12 +21,39 @@ echo -e "${GREEN}=== Haia Production Installation ===${NC}\n"
 # Configuration
 HAIA_USER="haia"
 HAIA_HOME="/opt/haia"
-PYTHON_VERSION="3.11"
+
+# Detect Python version (need 3.11 or higher)
+if command -v python3.13 &> /dev/null; then
+    PYTHON_CMD="python3.13"
+    PYTHON_VERSION="3.13"
+elif command -v python3.12 &> /dev/null; then
+    PYTHON_CMD="python3.12"
+    PYTHON_VERSION="3.12"
+elif command -v python3.11 &> /dev/null; then
+    PYTHON_CMD="python3.11"
+    PYTHON_VERSION="3.11"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
+else
+    echo -e "${RED}Python 3.11+ not found. Please install Python 3.11 or higher.${NC}"
+    exit 1
+fi
+
+# Verify Python version is 3.11+
+PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
+PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f2)
+if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 11 ]); then
+    echo -e "${RED}Python $PYTHON_VERSION found, but Haia requires Python 3.11+${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Found Python $PYTHON_VERSION at $(which $PYTHON_CMD)${NC}"
 
 # Step 1: Install system dependencies
 echo -e "${YELLOW}[1/7] Installing system dependencies...${NC}"
 apt update
-apt install -y python${PYTHON_VERSION} python${PYTHON_VERSION}-venv python3-pip git curl
+apt install -y python3-venv python3-pip git curl
 
 # Step 2: Create haia user
 echo -e "${YELLOW}[2/7] Creating haia user...${NC}"
@@ -54,7 +81,7 @@ fi
 # Step 4: Create virtual environment and install
 echo -e "${YELLOW}[4/7] Setting up Python environment...${NC}"
 cd "$HAIA_HOME"
-sudo -u "$HAIA_USER" python${PYTHON_VERSION} -m venv .venv
+sudo -u "$HAIA_USER" $PYTHON_CMD -m venv .venv
 sudo -u "$HAIA_USER" .venv/bin/pip install --upgrade pip
 sudo -u "$HAIA_USER" .venv/bin/pip install uv
 sudo -u "$HAIA_USER" .venv/bin/uv pip install -e .
