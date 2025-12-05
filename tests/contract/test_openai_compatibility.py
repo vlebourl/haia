@@ -53,7 +53,7 @@ class TestChatCompletionsNonStreaming:
 
         # Create a mock result
         mock_result = mocker.AsyncMock()
-        mock_result.data = "This is a test response from HAIA."
+        mock_result.output ="This is a test response from HAIA."
         mock_agent.run = mocker.AsyncMock(return_value=mock_result)
 
         # Mock ConversationRepository
@@ -93,7 +93,7 @@ class TestChatCompletionsNonStreaming:
         mock_agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "Proxmox VE is a virtualization platform."
+        mock_result.output ="Proxmox VE is a virtualization platform."
         mock_agent.run.return_value = mock_result
 
         response = client.post(
@@ -128,7 +128,7 @@ class TestChatCompletionsNonStreaming:
         mock_agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "Test response"
+        mock_result.output ="Test response"
         mock_agent.run.return_value = mock_result
 
         response = client.post(
@@ -161,7 +161,7 @@ class TestChatCompletionsNonStreaming:
         mock_agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "Response"
+        mock_result.output ="Response"
         mock_agent.run.return_value = mock_result
 
         response = client.post(
@@ -193,7 +193,7 @@ class TestChatCompletionsNonStreaming:
         mock_agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "I understand my role."
+        mock_result.output ="I understand my role."
         mock_agent.run.return_value = mock_result
 
         response = client.post(
@@ -218,7 +218,7 @@ class TestChatCompletionsNonStreaming:
         mock_agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.data = "Yes, I remember your previous question."
+        mock_result.output ="Yes, I remember your previous question."
         mock_agent.run.return_value = mock_result
 
         response = client.post(
