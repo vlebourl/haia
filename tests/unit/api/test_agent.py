@@ -71,7 +71,7 @@ class TestAgentInitialization:
         assert "Ceph" in DEFAULT_SYSTEM_PROMPT
         assert "Home Assistant" in DEFAULT_SYSTEM_PROMPT
         assert "Docker" in DEFAULT_SYSTEM_PROMPT
-        assert "Prometheus" in DEFAULT_SYSTEM_PROMPT
+        assert "LXC" in DEFAULT_SYSTEM_PROMPT
 
     def test_default_prompt_warns_about_destructive_operations(self):
         """Test that default system prompt includes safety guidance."""
