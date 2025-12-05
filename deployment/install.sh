@@ -55,28 +55,30 @@ echo -e "${YELLOW}[1/7] Installing system dependencies...${NC}"
 apt update
 apt install -y python3-venv python3-pip git curl
 
-# Step 2: Create haia user
-echo -e "${YELLOW}[2/7] Creating haia user...${NC}"
-if id "$HAIA_USER" &>/dev/null; then
-    echo "User $HAIA_USER already exists, skipping..."
-else
-    useradd --system --create-home --home-dir "$HAIA_HOME" --shell /bin/bash "$HAIA_USER"
-    echo "User $HAIA_USER created"
-fi
-
-# Step 3: Clone repository
-echo -e "${YELLOW}[3/7] Cloning Haia repository...${NC}"
+# Step 2: Clone repository first (before creating user)
+echo -e "${YELLOW}[2/7] Cloning Haia repository...${NC}"
+REPO_URL="https://github.com/vlebourl/haia.git"
 if [ -d "$HAIA_HOME/.git" ]; then
     echo "Repository already exists, pulling latest..."
     cd "$HAIA_HOME"
-    sudo -u "$HAIA_USER" git pull
+    git pull
 else
-    echo "Enter the repository URL (default: https://github.com/vlebourl/haia.git):"
-    read -r REPO_URL
-    REPO_URL=${REPO_URL:-https://github.com/vlebourl/haia.git}
-
-    sudo -u "$HAIA_USER" git clone "$REPO_URL" "$HAIA_HOME"
+    echo "Cloning from $REPO_URL..."
+    git clone "$REPO_URL" "$HAIA_HOME"
 fi
+
+# Step 3: Create haia user and set ownership
+echo -e "${YELLOW}[3/7] Creating haia user...${NC}"
+if id "$HAIA_USER" &>/dev/null; then
+    echo "User $HAIA_USER already exists, skipping..."
+else
+    # Create user without --create-home since directory already exists
+    useradd --system --home-dir "$HAIA_HOME" --shell /bin/bash "$HAIA_USER"
+    echo "User $HAIA_USER created"
+fi
+
+# Set ownership of the cloned directory
+chown -R "$HAIA_USER:$HAIA_USER" "$HAIA_HOME"
 
 # Step 4: Create virtual environment and install
 echo -e "${YELLOW}[4/7] Setting up Python environment...${NC}"
