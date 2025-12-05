@@ -13,6 +13,7 @@ dependencies = [
     "uvicorn>=0.24",
     "sse-starlette>=1.8",
     "pydantic-ai>=0.0.14",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
