@@ -10,36 +10,20 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client(mocker):
-    """Create test client with mocked dependencies."""
-    # Mock the database initialization
-    mocker.patch("haia.api.app.init_db", return_value=None)
-    mocker.patch("haia.api.app.close_db", return_value=None)
-
+    """Create test client with mocked agent."""
     # Mock PydanticAI agent creation
     mock_agent = mocker.Mock()
     mocker.patch("haia.api.app.create_agent", return_value=mock_agent)
 
     # Import app after mocking
     from haia.api.app import app
-    from haia.api.deps import get_db, set_agent
+    from haia.api.deps import set_agent
 
     # Set the agent explicitly for tests
     set_agent(mock_agent)
 
-    # Mock database session
-    async def mock_get_db():
-        mock_session = mocker.AsyncMock()
-        mock_session.commit = mocker.AsyncMock()
-        mock_session.rollback = mocker.AsyncMock()
-        yield mock_session
-
-    app.dependency_overrides[get_db] = mock_get_db
-
     test_client = TestClient(app)
     yield test_client
-
-    # Cleanup
-    app.dependency_overrides.clear()
 
 
 class TestChatCompletionsNonStreaming:

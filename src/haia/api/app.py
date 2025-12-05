@@ -10,7 +10,6 @@ from haia.agent import create_agent
 from haia.api.deps import set_agent
 from haia.api.routes import chat
 from haia.config import settings
-from haia.db.session import close_db, init_db
 
 # Configure logging - simpler format without correlation_id for startup logs
 logging.basicConfig(
@@ -30,12 +29,8 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database and agent on server startup."""
+    """Initialize agent on server startup."""
     logger.info("Starting HAIA Chat API server...")
-
-    # Initialize database schema
-    logger.info("Initializing database...")
-    await init_db()
 
     # Set API keys in environment for PydanticAI provider initialization
     if settings.anthropic_api_key:
@@ -53,7 +48,6 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup resources on server shutdown."""
     logger.info("Shutting down HAIA Chat API server...")
-    await close_db()
     logger.info("Server shutdown complete")
 
 

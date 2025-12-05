@@ -9,12 +9,8 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-async def client(mocker):
-    """Create test client with real database but mocked PydanticAI model."""
-    # Initialize real database for integration testing
-    from haia.db.session import init_db, close_db
-    await init_db()
-
+def client(mocker):
+    """Create test client with mocked PydanticAI model."""
     # Mock PydanticAI model inference to avoid external API calls
     mocker.patch("pydantic_ai.models.infer_model")
 
@@ -28,9 +24,6 @@ async def client(mocker):
     test_client = TestClient(app)
 
     yield test_client
-
-    # Cleanup
-    await close_db()
 
 
 class TestBasicChatFlow:
@@ -68,77 +61,16 @@ class TestBasicChatFlow:
         assert "Proxmox" in data["choices"][0]["message"]["content"]
 
     @pytest.mark.asyncio
-    async def test_conversation_is_persisted_to_database(self, client, mocker):
-        """Test that conversations are saved to the database."""
-        from haia.api.deps import get_agent
-        agent = get_agent()
-
-        mock_result = mocker.Mock()
-        mock_result.output = "Docker is a containerization platform."
-        agent.run = mocker.AsyncMock(return_value=mock_result)
-
-        # Send request with conversation ID
-        conversation_id = "test-conv-123"
-        response = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": "haia",
-                "messages": [
-                    {"role": "user", "content": "What is Docker?"}
-                ],
-                "stream": False,
-            },
-            headers={"X-Conversation-ID": conversation_id},
-        )
-
-        assert response.status_code == 200
-
-        # Verify conversation was created in database
-        from haia.db.session import get_db
-        from haia.db.repositories.conversation import ConversationRepository
-
-        async for session in get_db():
-            repo = ConversationRepository(session)
-            conversation = await repo.get(conversation_id)
-
-            assert conversation is not None
-            assert len(conversation.messages) == 2  # User + Assistant
-
-            # Check message contents
-            assert conversation.messages[0].role == "user"
-            assert conversation.messages[0].content == "What is Docker?"
-            assert conversation.messages[1].role == "assistant"
-            assert "Docker" in conversation.messages[1].content
-
-            break
-
-    @pytest.mark.asyncio
     async def test_agent_receives_conversation_history(self, client, mocker):
         """Test that agent receives previous conversation context."""
         from haia.api.deps import get_agent
         agent = get_agent()
 
         mock_result = mocker.Mock()
-        mock_result.output ="Yes, Docker uses containerization."
+        mock_result.output = "Containers are isolated application environments."
         agent.run = mocker.AsyncMock(return_value=mock_result)
 
-        conversation_id = "test-conv-history"
-
-        # First message
-        client.post(
-            "/v1/chat/completions",
-            json={
-                "model": "haia",
-                "messages": [
-                    {"role": "user", "content": "What is Docker?"}
-                ],
-                "stream": False,
-            },
-            headers={"X-Conversation-ID": conversation_id},
-        )
-
-        # Second message in same conversation
-        mock_result.output ="Containers are isolated application environments."
+        # Send request with conversation history (stateless pattern)
         response = client.post(
             "/v1/chat/completions",
             json={
@@ -150,7 +82,6 @@ class TestBasicChatFlow:
                 ],
                 "stream": False,
             },
-            headers={"X-Conversation-ID": conversation_id},
         )
 
         assert response.status_code == 200

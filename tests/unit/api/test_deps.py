@@ -12,7 +12,6 @@ from haia.api.deps import (
     correlation_id_var,
     get_agent,
     get_correlation_id,
-    get_db,
     set_agent,
 )
 
@@ -134,31 +133,3 @@ class TestAgentDependency:
         # Update to second agent
         set_agent(mock_agent_2)
         assert get_agent() is mock_agent_2
-
-
-class TestDatabaseDependency:
-    """Tests for database session dependency."""
-
-    @pytest.mark.asyncio
-    async def test_get_db_yields_session(self, mocker):
-        """Test that get_db yields a database session."""
-        # Mock the underlying _get_db function
-        mock_session = mocker.Mock(spec=AsyncMock)
-
-        async def mock_get_db():
-            yield mock_session
-
-        # Patch the imported _get_db
-        mocker.patch("haia.api.deps._get_db", side_effect=mock_get_db)
-
-        # Test that get_db yields the session
-        async for session in get_db():
-            assert session is mock_session
-            break
-
-    @pytest.mark.asyncio
-    async def test_get_db_is_async_generator(self):
-        """Test that get_db returns an async generator."""
-        from inspect import isasyncgenfunction
-
-        assert isasyncgenfunction(get_db)
