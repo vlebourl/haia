@@ -36,24 +36,9 @@ class TestChatCompletionsNonStreaming:
         mock_agent = get_agent()
 
         # Create a mock result
-        mock_result = mocker.AsyncMock()
-        mock_result.output ="This is a test response from HAIA."
+        mock_result = mocker.Mock()
+        mock_result.output = "This is a test response from HAIA."
         mock_agent.run = mocker.AsyncMock(return_value=mock_result)
-
-        # Mock ConversationRepository
-        mock_conversation = mocker.Mock()
-        mock_conversation.id = 1
-
-        mock_message = mocker.Mock()
-        mock_message.role = "user"
-        mock_message.content = "What is Proxmox?"
-
-        mock_repo = mocker.AsyncMock()
-        mock_repo.create_conversation = mocker.AsyncMock(return_value=mock_conversation)
-        mock_repo.add_message = mocker.AsyncMock(return_value=mock_message)
-        mock_repo.get_context_messages = mocker.AsyncMock(return_value=[mock_message])
-
-        mocker.patch("haia.api.routes.chat.ConversationRepository", return_value=mock_repo)
 
         # Send OpenAI-compatible request
         response = client.post(
@@ -78,7 +63,7 @@ class TestChatCompletionsNonStreaming:
 
         mock_result = mocker.Mock()
         mock_result.output ="Proxmox VE is a virtualization platform."
-        mock_agent.run.return_value = mock_result
+        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
 
         response = client.post(
             "/v1/chat/completions",
@@ -113,7 +98,7 @@ class TestChatCompletionsNonStreaming:
 
         mock_result = mocker.Mock()
         mock_result.output ="Test response"
-        mock_agent.run.return_value = mock_result
+        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
 
         response = client.post(
             "/v1/chat/completions",
@@ -146,7 +131,7 @@ class TestChatCompletionsNonStreaming:
 
         mock_result = mocker.Mock()
         mock_result.output ="Response"
-        mock_agent.run.return_value = mock_result
+        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
 
         response = client.post(
             "/v1/chat/completions",
@@ -178,7 +163,7 @@ class TestChatCompletionsNonStreaming:
 
         mock_result = mocker.Mock()
         mock_result.output ="I understand my role."
-        mock_agent.run.return_value = mock_result
+        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
 
         response = client.post(
             "/v1/chat/completions",
@@ -203,7 +188,7 @@ class TestChatCompletionsNonStreaming:
 
         mock_result = mocker.Mock()
         mock_result.output ="Yes, I remember your previous question."
-        mock_agent.run.return_value = mock_result
+        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
 
         response = client.post(
             "/v1/chat/completions",
