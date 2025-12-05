@@ -11,27 +11,18 @@ class TestAgentInitialization:
 
     def test_create_agent_returns_agent_instance(self, mocker):
         """Test that create_agent returns a PydanticAI Agent."""
-        # Mock LLM client
-        mock_client = mocker.Mock()
+        # Mock PydanticAI's model inference to avoid API calls
+        mocker.patch("pydantic_ai.models.infer_model")
 
-        agent = create_agent(mock_client)
+        agent = create_agent("test:model")
 
         assert isinstance(agent, Agent)
 
-    def test_create_agent_uses_llm_client(self, mocker):
-        """Test that create_agent uses the provided LLM client."""
-        mock_client = mocker.Mock()
-
-        agent = create_agent(mock_client)
-
-        # Agent should have the client as its model
-        assert agent.model == mock_client
-
     def test_system_prompt_is_set(self, mocker):
         """Test that agent is created with homelab system prompt."""
-        mock_client = mocker.Mock()
+        mocker.patch("pydantic_ai.models.infer_model")
 
-        agent = create_agent(mock_client)
+        agent = create_agent("test:model")
 
         # Agent should have the homelab assistant prompt
         assert agent.system_prompt == HOMELAB_ASSISTANT_PROMPT
