@@ -1,0 +1,76 @@
+# HAIA Personal Homelab Profile Example
+#
+# This file demonstrates how to customize HAIA for your specific homelab environment.
+# Copy this file to `haia_profile.yaml` and customize it with your infrastructure details.
+#
+# IMPORTANT: The `haia_profile.yaml` file is gitignored to prevent committing personal
+# infrastructure information. This example file shows the structure but should not
+# contain your actual private data.
+
+homelab:
+  # Homelab name (shown in logs and helps identify the environment)
+  name: "My Homelab"
+
+  # Proxmox VE Configuration
+  proxmox:
+    # List of Proxmox hosts in your cluster
+    hosts:
+      - name: "pve1"
+        ip: "192.168.1.10"
+        role: "primary"
+
+      - name: "pve2"
+        ip: "192.168.1.11"
+        role: "secondary"
+
+      - name: "pve3"
+        ip: "192.168.1.12"
+        role: "secondary"
+
+    # Important VMs you frequently work with
+    important_vms:
+      - name: "homeassistant"
+        id: 100
+        description: "Home automation hub"
+
+      - name: "docker-host"
+        id: 101
+        description: "Main Docker workload server"
+
+      - name: "k8s-master"
+        id: 200
+        description: "Kubernetes control plane"
+
+      - name: "truenas"
+        id: 300
+        description: "NAS storage system"
+
+  # Network Configuration
+  network:
+    # Your homelab subnets
+    subnets:
+      - "192.168.1.0/24 (Management)"
+      - "192.168.10.0/24 (VMs)"
+      - "192.168.20.0/24 (Containers)"
+      - "192.168.30.0/24 (IoT)"
+
+  # User Preferences
+  # These are hints to the AI about your working style and preferences
+  preferences:
+    - "Prefer Debian-based systems over Red Hat"
+    - "Use Docker Compose for container orchestration"
+    - "All infrastructure is IPv4 only (no IPv6)"
+    - "Monitoring stack: Prometheus + Grafana"
+    - "Backup strategy: Daily snapshots to TrueNAS"
+
+  # Custom Instructions
+  # Free-form text with any additional context or instructions
+  custom_instructions: |
+    My homelab runs in a home office environment with a single rack.
+    Power is on a UPS but is not enterprise-grade, so I prefer solutions
+    that handle graceful shutdowns and restarts well.
+
+    I'm most comfortable with Python and Bash for automation.
+
+    When suggesting changes, please always warn about potential impact
+    on running services, especially Home Assistant and network infrastructure.

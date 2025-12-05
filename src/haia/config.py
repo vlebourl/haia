@@ -26,6 +26,16 @@ class Settings(BaseSettings):
         le=600.0,
     )
 
+    # System Prompt Configuration
+    haia_system_prompt: str | None = Field(
+        None,
+        description="Custom system prompt (overrides default if provided)",
+    )
+    haia_profile_path: str = Field(
+        "haia_profile.yaml",
+        description="Path to personal homelab profile YAML file",
+    )
+
     # Application Configuration
     context_window_size: int = Field(
         20, description="Number of messages to keep in context window", ge=1
