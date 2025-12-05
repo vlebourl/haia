@@ -44,6 +44,13 @@ config.local.json
 secrets.json
 mcp_config.local.json
 
+# Personal homelab profiles (contain personal/private infrastructure details)
+haia_profile.yaml
+haia_profile.yml
+*_profile.yaml
+*_profile.yml
+.haia/
+
 # Logs and databases
 *.log
 *.sqlite
