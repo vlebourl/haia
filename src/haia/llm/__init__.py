@@ -1,6 +1,9 @@
-"""LLM abstraction layer - model-agnostic interface for chat completion."""
+"""LLM module for HAIA.
 
-from haia.llm.client import LLMClient
+Note: Feature 003 uses PydanticAI's native model handling.
+Error classes kept for potential use in Phase 6 (Error Handling).
+"""
+
 from haia.llm.errors import (
     AuthenticationError,
     InvalidRequestError,
@@ -11,19 +14,9 @@ from haia.llm.errors import (
     TimeoutError,
     ValidationError,
 )
-from haia.llm.factory import create_client
-from haia.llm.models import LLMResponse, LLMResponseChunk, Message, TokenUsage
 
 __all__ = [
-    # Client interface
-    "LLMClient",
-    "create_client",
-    # Data models
-    "Message",
-    "TokenUsage",
-    "LLMResponse",
-    "LLMResponseChunk",
-    # Errors
+    # Error classes (kept for Phase 6 - Error Handling)
     "LLMError",
     "AuthenticationError",
     "RateLimitError",
