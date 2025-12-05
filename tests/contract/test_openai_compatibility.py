@@ -15,10 +15,7 @@ def client(mocker):
     mocker.patch("haia.api.app.init_db", return_value=None)
     mocker.patch("haia.api.app.close_db", return_value=None)
 
-    # Mock the LLM client and agent
-    mock_llm_client = mocker.Mock()
-    mocker.patch("haia.api.app.create_client", return_value=mock_llm_client)
-
+    # Mock PydanticAI agent creation
     mock_agent = mocker.Mock()
     mocker.patch("haia.api.app.create_agent", return_value=mock_agent)
 
