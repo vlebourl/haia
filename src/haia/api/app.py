@@ -1,6 +1,7 @@
 """FastAPI application setup with startup/shutdown handlers."""
 
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,11 +11,10 @@ from haia.api.deps import set_agent
 from haia.api.routes import chat
 from haia.config import settings
 from haia.db.session import close_db, init_db
-from haia.llm.factory import create_client
 
-# Configure logging
+# Configure logging - simpler format without correlation_id for startup logs
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - [%(correlation_id)s] - %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 
@@ -37,13 +37,13 @@ async def startup_event():
     logger.info("Initializing database...")
     await init_db()
 
-    # Create LLM client from config
-    logger.info(f"Initializing LLM client with model: {settings.haia_model}")
-    llm_client = create_client(settings)
+    # Set API keys in environment for PydanticAI provider initialization
+    if settings.anthropic_api_key:
+        os.environ["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
 
-    # Create and set agent
-    logger.info("Creating PydanticAI agent...")
-    agent = create_agent(llm_client)
+    # Create PydanticAI agent with model from config
+    logger.info(f"Creating PydanticAI agent with model: {settings.haia_model}")
+    agent = create_agent(settings.haia_model)
     set_agent(agent)
 
     logger.info("Server startup complete - ready to accept requests")
