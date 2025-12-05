@@ -9,6 +9,32 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+def create_mock_stream_context(text_chunks):
+    """Helper to create mock streaming context manager for tests.
+
+    Args:
+        text_chunks: List of text strings to yield as stream
+
+    Returns:
+        Mock context manager compatible with agent.run_stream()
+    """
+    async def mock_stream_text(delta=False):
+        for chunk in text_chunks:
+            yield chunk
+
+    class MockStreamResult:
+        def stream_text(self, delta=False):
+            return mock_stream_text(delta)
+
+    class MockStreamContext:
+        async def __aenter__(self):
+            return MockStreamResult()
+        async def __aexit__(self, *args):
+            pass
+
+    return MockStreamContext()
+
+
 @pytest.fixture
 def client(mocker):
     """Create test client with mocked agent for streaming tests."""
@@ -36,31 +62,9 @@ class TestSSEStreaming:
 
         mock_agent = get_agent()
 
-        # Mock agent.run_stream to return an async generator
-        async def mock_stream():
-            yield "Proxmox "
-            yield "VE "
-            yield "is "
-            yield "a "
-            yield "virtualization "
-            yield "platform."
-
-        mock_agent.run_stream = mocker.Mock(return_value=mock_stream())
-
-        # Mock ConversationRepository
-        mock_conversation = mocker.Mock()
-        mock_conversation.id = 1
-
-        mock_message = mocker.Mock()
-        mock_message.role = "user"
-        mock_message.content = "What is Proxmox?"
-
-        mock_repo = mocker.AsyncMock()
-        mock_repo.create_conversation = mocker.AsyncMock(return_value=mock_conversation)
-        mock_repo.add_message = mocker.AsyncMock(return_value=mock_message)
-        mock_repo.get_context_messages = mocker.AsyncMock(return_value=[mock_message])
-
-        mocker.patch("haia.api.routes.chat.ConversationRepository", return_value=mock_repo)
+        # Mock agent.run_stream
+        text_chunks = ["Proxmox ", "VE ", "is ", "a ", "virtualization ", "platform."]
+        mock_agent.run_stream = mocker.Mock(return_value=create_mock_stream_context(text_chunks))
 
         # Send streaming request
         with client.stream(
@@ -105,23 +109,8 @@ class TestSSEStreaming:
         mock_agent = get_agent()
 
         # Mock agent.run_stream
-        async def mock_stream():
-            yield "Hello "
-            yield "World!"
-
-        mock_agent.run_stream = mocker.Mock(return_value=mock_stream())
-
-        # Mock repository
-        mock_conversation = mocker.Mock()
-        mock_conversation.id = 1
-        mock_message = mocker.Mock(role="user", content="Test")
-
-        mock_repo = mocker.AsyncMock()
-        mock_repo.create_conversation = mocker.AsyncMock(return_value=mock_conversation)
-        mock_repo.add_message = mocker.AsyncMock(return_value=mock_message)
-        mock_repo.get_context_messages = mocker.AsyncMock(return_value=[mock_message])
-
-        mocker.patch("haia.api.routes.chat.ConversationRepository", return_value=mock_repo)
+        text_chunks = ["Hello ", "World!"]
+        mock_agent.run_stream = mocker.Mock(return_value=create_mock_stream_context(text_chunks))
 
         # Send streaming request
         with client.stream(
@@ -155,22 +144,9 @@ class TestSSEStreaming:
 
         mock_agent = get_agent()
 
-        async def mock_stream():
-            yield "Test response"
-
-        mock_agent.run_stream = mocker.Mock(return_value=mock_stream())
-
-        # Mock repository
-        mock_conversation = mocker.Mock()
-        mock_conversation.id = 1
-        mock_message = mocker.Mock(role="user", content="Test")
-
-        mock_repo = mocker.AsyncMock()
-        mock_repo.create_conversation = mocker.AsyncMock(return_value=mock_conversation)
-        mock_repo.add_message = mocker.AsyncMock(return_value=mock_message)
-        mock_repo.get_context_messages = mocker.AsyncMock(return_value=[mock_message])
-
-        mocker.patch("haia.api.routes.chat.ConversationRepository", return_value=mock_repo)
+        # Mock agent.run_stream
+        text_chunks = ["Test response"]
+        mock_agent.run_stream = mocker.Mock(return_value=create_mock_stream_context(text_chunks))
 
         with client.stream(
             "POST",
@@ -203,22 +179,9 @@ class TestSSEStreaming:
 
         mock_agent = get_agent()
 
-        async def mock_stream():
-            yield "Test"
-
-        mock_agent.run_stream = mocker.Mock(return_value=mock_stream())
-
-        # Mock repository
-        mock_conversation = mocker.Mock()
-        mock_conversation.id = 1
-        mock_message = mocker.Mock(role="user", content="Test")
-
-        mock_repo = mocker.AsyncMock()
-        mock_repo.create_conversation = mocker.AsyncMock(return_value=mock_conversation)
-        mock_repo.add_message = mocker.AsyncMock(return_value=mock_message)
-        mock_repo.get_context_messages = mocker.AsyncMock(return_value=[mock_message])
-
-        mocker.patch("haia.api.routes.chat.ConversationRepository", return_value=mock_repo)
+        # Mock agent.run_stream
+        text_chunks = ["Test"]
+        mock_agent.run_stream = mocker.Mock(return_value=create_mock_stream_context(text_chunks))
 
         with client.stream(
             "POST",
@@ -251,23 +214,8 @@ class TestClientDisconnection:
         mock_agent = get_agent()
 
         # Mock long-running stream
-        async def mock_long_stream():
-            for i in range(100):
-                yield f"Token {i} "
-
-        mock_agent.run_stream = mocker.Mock(return_value=mock_long_stream())
-
-        # Mock repository
-        mock_conversation = mocker.Mock()
-        mock_conversation.id = 1
-        mock_message = mocker.Mock(role="user", content="Test")
-
-        mock_repo = mocker.AsyncMock()
-        mock_repo.create_conversation = mocker.AsyncMock(return_value=mock_conversation)
-        mock_repo.add_message = mocker.AsyncMock(return_value=mock_message)
-        mock_repo.get_context_messages = mocker.AsyncMock(return_value=[mock_message])
-
-        mocker.patch("haia.api.routes.chat.ConversationRepository", return_value=mock_repo)
+        text_chunks = [f"Token {i} " for i in range(100)]
+        mock_agent.run_stream = mocker.Mock(return_value=create_mock_stream_context(text_chunks))
 
         # Start streaming but disconnect early
         with client.stream(
