@@ -302,3 +302,22 @@ async def chat_completions(
             status_code=500,
             detail="Internal server error processing chat completion",
         )
+
+
+@router.get("/v1/models")
+async def list_models():
+    """List available models (OpenAI-compatible endpoint).
+
+    Returns a minimal models list for OpenWebUI compatibility.
+    """
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": "haia",
+                "object": "model",
+                "created": 1699000000,
+                "owned_by": "haia",
+            }
+        ],
+    }
