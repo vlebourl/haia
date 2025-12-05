@@ -65,13 +65,13 @@ class TestAgentInitialization:
         assert DEFAULT_SYSTEM_PROMPT in combined_prompt
         assert profile_context in combined_prompt
 
-    def test_default_prompt_contains_homelab_keywords(self):
-        """Test that default system prompt mentions key homelab technologies."""
-        assert "Proxmox" in DEFAULT_SYSTEM_PROMPT
-        assert "Ceph" in DEFAULT_SYSTEM_PROMPT
-        assert "Home Assistant" in DEFAULT_SYSTEM_PROMPT
-        assert "Docker" in DEFAULT_SYSTEM_PROMPT
-        assert "LXC" in DEFAULT_SYSTEM_PROMPT
+    def test_default_prompt_is_minimal(self):
+        """Test that default system prompt is minimal (comprehensive prompt should be in .env)."""
+        # The DEFAULT_SYSTEM_PROMPT is intentionally minimal - the full personality
+        # prompt should be configured via HAIA_SYSTEM_PROMPT in .env
+        assert "Haia" in DEFAULT_SYSTEM_PROMPT
+        assert "homelab" in DEFAULT_SYSTEM_PROMPT.lower()
+        assert len(DEFAULT_SYSTEM_PROMPT) < 500  # Should be brief
 
     def test_default_prompt_warns_about_destructive_operations(self):
         """Test that default system prompt includes safety guidance."""
