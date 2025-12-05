@@ -1,7 +1,8 @@
-"""FastAPI application setup with startup/shutdown handlers."""
+"""FastAPI application setup with lifespan management."""
 
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,17 +20,18 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
-app = FastAPI(
-    title="HAIA Chat API",
-    description="OpenAI-compatible Chat Completions API for Homelab AI Assistant",
-    version="1.0.0",
-)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan (startup and shutdown).
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize agent on server startup."""
+    Args:
+        app: FastAPI application instance
+
+    Yields:
+        Control to the application during its runtime
+    """
+    # Startup
     logger.info("Starting HAIA Chat API server...")
 
     # Set API keys in environment for PydanticAI provider initialization
@@ -43,12 +45,20 @@ async def startup_event():
 
     logger.info("Server startup complete - ready to accept requests")
 
+    yield  # Application runs here
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup resources on server shutdown."""
+    # Shutdown
     logger.info("Shutting down HAIA Chat API server...")
     logger.info("Server shutdown complete")
+
+
+# Create FastAPI app with lifespan manager
+app = FastAPI(
+    title="HAIA Chat API",
+    description="OpenAI-compatible Chat Completions API for Homelab AI Assistant",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 
 # Configure CORS
