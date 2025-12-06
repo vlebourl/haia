@@ -2,8 +2,25 @@
 
 **Feature Branch**: `003-openai-chat-api`
 **Created**: 2025-11-30
-**Status**: Draft
+**Status**: Completed (with architectural changes)
+**Completed**: 2025-12-06
 **Input**: User description: "OpenAI-Compatible Chat API with Streaming - FastAPI server exposing /v1/chat/completions endpoint with SSE streaming support, PydanticAI agent integration, conversation history management, and OpenWebUI compatibility"
+
+---
+
+## IMPLEMENTATION NOTE
+
+**Architectural Change**: The final implementation uses a **stateless design** where the client (OpenWebUI) manages conversation history, rather than server-side database persistence as originally specified.
+
+**Rationale**:
+- Simpler deployment (no database setup or migrations)
+- Standard OpenAI API pattern (clients send full message history)
+- OpenWebUI already manages conversation state
+- Reduces complexity for MVP
+
+**Impact**: References to database, conversation persistence, and 20-message context windows in this spec reflect the original plan but were not implemented. The stateless approach proved sufficient for the MVP use case.
+
+---
 
 ## User Scenarios & Testing *(mandatory)*
 

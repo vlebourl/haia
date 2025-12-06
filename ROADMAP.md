@@ -72,7 +72,7 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 #### [P1] OpenAI-Compatible Chat API with Streaming
 
-**Description**: FastAPI server exposing `/v1/chat/completions` endpoint with SSE streaming support, compatible with OpenWebUI and other OpenAI clients.
+**Description**: FastAPI server exposing `/v1/chat/completions` endpoint with SSE streaming support, compatible with OpenWebUI and other OpenAI clients. **Stateless design** - client manages conversation history.
 
 **User Value**: Allows users to interact with HAIA through any OpenAI-compatible chat interface (OpenWebUI, LibreChat, etc.). Streaming provides real-time response feedback.
 
@@ -82,17 +82,15 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 - SSE (Server-Sent Events) streaming for real-time token delivery
 - Non-streaming fallback for clients that don't support SSE
 - Integrate with PydanticAI agent for message processing
-- Load conversation history from database for multi-turn context
-- Save new messages to database after response generation
-- Error handling for LLM failures, rate limits, database errors
+- **Stateless design**: Client sends full conversation history in each request
+- Error handling for LLM failures, rate limits
 - CORS configuration for web clients
-- Located in: `src/haia/interfaces/api.py`
+- Located in: `src/haia/api/routes/chat.py`
 
 **Dependencies**:
 - ✅ Configuration Management (Phase 0)
 - ✅ LLM Abstraction Layer - COMPLETED
 - ✅ PydanticAI Agent Setup (Phase 0)
-- ✅ Conversation Database - COMPLETED
 - 📦 `fastapi` framework
 - 📦 `uvicorn` ASGI server
 - 📦 `sse-starlette` for SSE streaming
@@ -102,8 +100,9 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 - Async-First: All endpoints are async, non-blocking I/O
 - Observability: Log all requests with correlation IDs, track latency and errors
 - Security: Input validation on all request fields, rate limiting (future)
+- Stateless: No server-side session storage, client manages conversation history
 
-**Effort Estimate**: L - Complex streaming implementation, OpenAI format compatibility, database integration, error handling
+**Effort Estimate**: M - Streaming implementation, OpenAI format compatibility, error handling
 
 **Priority**: P1 - Core MVP feature, highest user value
 
@@ -274,48 +273,52 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
-### ✅ Conversation Database (Feature 002)
+### ✅ OpenAI-Compatible Chat API with Streaming (Feature 003)
 
-**Completed**: 2025-11-30
-**PR**: #2
-**Tasks**: 73/73
-**Tests**: 39 passing
+**Completed**: 2025-12-06
+**PR**: #3
+**Tests**: Integration tested
 
-**Description**: SQLite database with async SQLAlchemy for persistent conversation storage with automatic 20-message context window management.
+**Description**: Stateless FastAPI server with OpenAI-compatible `/v1/chat/completions` endpoint, SSE streaming support, and PydanticAI agent integration.
 
 **Implementation**:
-- SQLAlchemy 2.0 async models: `Conversation` and `Message`
-- `ConversationRepository` with full CRUD operations
-- Automatic 20-message sliding context window
-- Alembic migrations for schema versioning
-- FastAPI dependency injection pattern (`get_db()`)
-- Connection pooling and session lifecycle management
-- Located in: `src/haia/db/`
+- FastAPI server with `/v1/chat/completions` endpoint
+- SSE streaming for real-time token delivery
+- Non-streaming mode for simple requests
+- PydanticAI agent integration with message history
+- Stateless design - client manages conversation history
+- OpenWebUI compatible
+- Located in: `src/haia/api/`
 
 **Key Achievements**:
-- ✅ Type-safe database models with Pydantic validation
-- ✅ Async database operations throughout
-- ✅ Efficient context window queries (< 50ms for 1000 messages)
-- ✅ Comprehensive test coverage (39 tests)
-- ✅ Concurrent access validated (10 simultaneous operations)
+- ✅ OpenAI-compatible API format
+- ✅ Streaming and non-streaming modes
+- ✅ PydanticAI agent integration
+- ✅ Stateless architecture (no database dependency)
+- ✅ OpenWebUI tested and working
 
 ---
 
 ## Changelog
 
-- **2025-11-30**: ✅ **Completed LLM Abstraction Layer and Conversation Database**
+- **2025-12-06**: ✅ **Completed OpenAI Chat API - Architectural Pivot to Stateless Design**
+  - ✅ OpenAI-Compatible Chat API (Feature 003): Streaming and non-streaming support, PR #3 merged
+    - FastAPI server with `/v1/chat/completions` endpoint
+    - SSE streaming for real-time responses
+    - PydanticAI agent integration
+    - OpenWebUI compatible
+  - **Architecture Decision**: Removed database persistence in favor of stateless design
+    - Client (OpenWebUI) manages conversation history
+    - Simpler deployment, no database migrations
+    - Aligns with standard OpenAI API pattern
+  - Updated roadmap to reflect stateless architecture
+  - MVP now complete: Users can chat with HAIA via OpenWebUI
+
+- **2025-11-30**: ✅ **Completed LLM Abstraction Layer**
   - ✅ LLM Abstraction Layer (Feature 001): 50/50 tasks, 81 tests passing, PR #1 merged
     - Anthropic and Ollama provider support
     - Performance < 0.1ms overhead, full concurrency support
-  - ✅ Conversation Database (Feature 002): 73/73 tasks, 39 tests passing, PR #2 merged
-    - SQLite + SQLAlchemy async implementation
-    - 20-message sliding context window
-    - Alembic migrations for schema management
-  - Updated roadmap to reflect completed features
-  - Current focus moved to Phase 1 MVP: OpenAI-compatible Chat API
-
-- **2025-11-30**: Initial roadmap created with Phase 0 foundation and Phase 1 MVP chat feature
+  - Initial roadmap created with Phase 0 foundation and Phase 1 MVP chat feature
   - Defined LLM abstraction layer for multi-model support
-  - Defined database setup for persistent conversation storage
   - Defined OpenAI-compatible chat API with streaming support
   - Defined Phase 2 (Proxmox, MCP) and Phase 3 (scheduler, notifications)
