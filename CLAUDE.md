@@ -174,7 +174,7 @@ All configuration managed through `pydantic-settings` with environment variables
 
 ## Active Technologies
 - N/A (stateless client, no persistence in this layer) (001-llm-abstraction)
-- SQLite via existing `haia.db` module (async SQLAlchemy) (003-openai-chat-api)
+- Stateless API design - client manages conversation history (003-openai-chat-api)
 
 ## Recent Changes
 - 001-llm-abstraction: Added Python 3.11+
