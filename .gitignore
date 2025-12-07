@@ -37,6 +37,7 @@ ENV/
 .env
 .env.local
 .env.*.local
+.env.backup*
 *.env
 .anthropic_key
 local_config.json
