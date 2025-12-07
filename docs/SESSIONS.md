@@ -143,7 +143,7 @@ responses with same technical depth as before.
 
 ## Session 2: Conversation Boundary Detection
 
-**Status:** Blocked until Session 1 complete (optional - can develop in parallel)
+**Status:** 🔄 READY TO START
 **Priority:** High
 **Effort:** 2-3 days
 **Dependencies:** None (independent component)
@@ -181,7 +181,7 @@ and transcript capture.
 
 ## Session 3: Docker Compose Stack & Neo4j Infrastructure
 
-**Status:** Blocked until ready to start memory system infrastructure
+**Status:** 🔄 READY TO START
 **Priority:** High (foundation for Sessions 4-7)
 **Effort:** 4-5 days
 **Dependencies:** None (can develop in parallel with Session 2)
