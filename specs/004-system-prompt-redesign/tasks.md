@@ -141,8 +141,8 @@
 
 ### Git Commit
 
-- [ ] T049 Stage changes: git add .env docs/SESSIONS.md CLAUDE.md specs/004-system-prompt-redesign/
-- [ ] T050 Commit with message: "feat: reposition HAIA as versatile companion\n\n- Remove 'Homelab Specialty' framing from system prompt\n- Add diverse conversation examples (philosophy, whisky, family, creative)\n- Preserve all homelab expertise and critical service warnings\n- Tested: 100% no disclaimers + expertise maintained\n\nCloses #004-system-prompt-redesign"
+- [x] T049 Stage changes: git add docs/SESSIONS.md CLAUDE.md specs/004-system-prompt-redesign/ (NOTE: .env correctly excluded from git - contains API key)
+- [x] T050 Commit with message: "feat: reposition HAIA as versatile companion" ✅ COMPLETE - Commit d592722 created with 11 files, 2805 insertions
 
 **Checkpoint**: All validation complete, documentation updated, changes committed
 
