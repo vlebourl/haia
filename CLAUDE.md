@@ -175,6 +175,7 @@ All configuration managed through `pydantic-settings` with environment variables
 ## Active Technologies
 - N/A (stateless client, no persistence in this layer) (001-llm-abstraction)
 - Stateless API design - client manages conversation history (003-openai-chat-api)
+- Versatile companion system prompt - homelab as one capability among many (004-system-prompt-redesign)
 
 ## Recent Changes
 - 001-llm-abstraction: Added Python 3.11+
