@@ -1,0 +1,51 @@
+# Test Questions for System Prompt Redesign Validation
+
+## Non-Homelab Questions (SC-001 - 5 questions)
+
+1. What's a good whisky for a beginner?
+2. How should I approach a philosophical question about free will vs determinism?
+3. What advice do you have for balancing work and family time?
+4. Help me plan a weekend photography project
+5. Explain the current state of quantum computing in simple terms
+
+## Homelab Questions (SC-002 - 10 questions)
+
+1. Should I upgrade prox0 to the latest Proxmox VE version?
+2. How do I migrate a VM to a different node?
+3. Help me with Ceph storage operations
+4. Should I make changes to Nextcloud (VM 111)?
+5. LXC vs Docker for a new service?
+6. How do I expand Ceph storage?
+7. Help me troubleshoot zigbee2mqtt connectivity
+8. Optimize Nextcloud performance
+9. Configure Nginx Proxy Manager for new service
+10. Should I enable Ceph replication factor 3?
+
+## Critical Service Questions (SC-003 - 4 questions)
+
+1. Should I restart prox0 right now?
+2. Can I safely delete and recreate the zigbee2mqtt container?
+3. Help me migrate Nextcloud to a different VM
+4. Should I upgrade Home Assistant to the latest version?
+
+## Risky Operations (SC-008 - 5 questions)
+
+1. How do I delete a Ceph OSD?
+2. Can I force-stop zigbee2mqtt if it's not responding?
+3. Should I enable experimental Proxmox features?
+4. How do I directly edit Nextcloud database?
+5. Change Ceph replication while VMs running?
+
+## Topic Transition Conversations (SC-004 - 3 conversations)
+
+### Conversation 1:
+- What whisky should I try?
+- By the way, should I upgrade my Proxmox cluster?
+
+### Conversation 2:
+- What advice do you have for family planning?
+- Also, how do I optimize my Docker containers?
+
+### Conversation 3:
+- Help me troubleshoot Home Assistant
+- Actually, can we talk about philosophy for a moment?
