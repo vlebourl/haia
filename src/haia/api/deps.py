@@ -7,11 +7,16 @@ from contextvars import ContextVar
 from fastapi import Header
 from pydantic_ai import Agent
 
+from haia.memory.tracker import ConversationTracker
+
 # Correlation ID context variable for request tracing
 correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="unknown")
 
 # Global agent instance (initialized at startup)
 _agent: Agent | None = None
+
+# Global conversation tracker instance (initialized at startup)
+_conversation_tracker: ConversationTracker | None = None
 
 # Logger
 logger = logging.getLogger(__name__)
@@ -62,3 +67,29 @@ def set_agent(agent: Agent) -> None:
     """
     global _agent
     _agent = agent
+
+
+def get_conversation_tracker() -> ConversationTracker:
+    """FastAPI dependency for conversation tracker injection.
+
+    Returns:
+        ConversationTracker instance
+
+    Raises:
+        RuntimeError: If tracker not initialized (server startup failed)
+    """
+    if _conversation_tracker is None:
+        raise RuntimeError(
+            "ConversationTracker not initialized - server startup may have failed"
+        )
+    return _conversation_tracker
+
+
+def set_conversation_tracker(tracker: ConversationTracker) -> None:
+    """Set the global conversation tracker instance (called during startup).
+
+    Args:
+        tracker: Configured ConversationTracker
+    """
+    global _conversation_tracker
+    _conversation_tracker = tracker

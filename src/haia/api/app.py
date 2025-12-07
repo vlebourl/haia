@@ -8,9 +8,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from haia.agent import create_agent
-from haia.api.deps import set_agent
+from haia.api.deps import set_agent, set_conversation_tracker
 from haia.api.routes import chat
 from haia.config import settings
+from haia.memory.tracker import ConversationTracker
 
 # Configure logging - simpler format without correlation_id for startup logs
 logging.basicConfig(
@@ -42,6 +43,18 @@ async def lifespan(app: FastAPI):
     logger.info(f"Creating PydanticAI agent with model: {settings.haia_model}")
     agent = create_agent(settings.haia_model)
     set_agent(agent)
+
+    # Initialize conversation tracker for boundary detection
+    logger.info(
+        f"Initializing conversation tracker (storage: {settings.transcript_storage_dir})"
+    )
+    tracker = ConversationTracker(
+        storage_dir=settings.transcript_storage_dir,
+        idle_threshold_minutes=settings.boundary_idle_threshold_minutes,
+        message_drop_threshold=settings.boundary_message_drop_threshold,
+        max_tracked_conversations=settings.boundary_max_tracked_conversations,
+    )
+    set_conversation_tracker(tracker)
 
     logger.info("Server startup complete - ready to accept requests")
 

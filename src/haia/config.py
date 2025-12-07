@@ -46,6 +46,30 @@ class Settings(BaseSettings):
     host: str = Field("0.0.0.0", description="API server host")
     port: int = Field(8000, description="API server port", ge=1, le=65535)
 
+    # Conversation Boundary Detection Configuration
+    transcript_storage_dir: str = Field(
+        "data/transcripts",
+        description="Directory for storing conversation transcripts",
+    )
+    boundary_idle_threshold_minutes: int = Field(
+        10,
+        description="Minimum idle time (minutes) to consider for boundary detection",
+        ge=1,
+        le=1440,
+    )
+    boundary_message_drop_threshold: float = Field(
+        0.5,
+        description="Minimum message count drop (fraction) to trigger boundary",
+        ge=0.0,
+        le=1.0,
+    )
+    boundary_max_tracked_conversations: int = Field(
+        1000,
+        description="Maximum number of conversations to track in memory (LRU eviction)",
+        ge=10,
+        le=100000,
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )

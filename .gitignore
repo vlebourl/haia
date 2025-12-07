@@ -60,6 +60,9 @@ specs/
 *.sqlite
 *.db
 
+# Runtime data (conversation transcripts, caches)
+data/
+
 # Testing
 .pytest_cache/
 .coverage
