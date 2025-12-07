@@ -4,26 +4,53 @@ Implements OpenAI-compatible /v1/chat/completions endpoint for HAIA.
 Stateless design - client manages conversation history.
 """
 
+import hashlib
 import json
 import logging
 import uuid
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic_ai import Agent
 
-from haia.api.deps import get_agent, get_correlation_id
+from haia.api.deps import get_agent, get_conversation_tracker, get_correlation_id
 from haia.api.models.chat import (
     ChatCompletionChunk,
     ChatCompletionRequest,
     ChatCompletionResponse,
     TokenUsage,
 )
+from haia.memory.tracker import ConversationTracker
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def get_conversation_id(
+    request: Request,
+    x_conversation_id: str | None = Header(None),
+) -> str:
+    """Extract or generate conversation ID for boundary detection.
+
+    Args:
+        request: FastAPI request object
+        x_conversation_id: Optional conversation ID from request header
+
+    Returns:
+        Conversation ID (from header or generated from IP + User-Agent)
+    """
+    if x_conversation_id:
+        return x_conversation_id
+
+    # Fallback: Generate ID from IP + User-Agent
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    fallback_str = f"{client_ip}:{user_agent}"
+
+    # Use first 16 characters of SHA-256 hash
+    return hashlib.sha256(fallback_str.encode("utf-8")).hexdigest()[:16]
 
 
 async def stream_chat_response(
@@ -139,7 +166,9 @@ async def stream_chat_response(
 async def chat_completions(
     request: ChatCompletionRequest,
     agent: Agent = Depends(get_agent),
+    tracker: ConversationTracker = Depends(get_conversation_tracker),
     correlation_id: str = Depends(get_correlation_id),
+    conversation_id: str = Depends(get_conversation_id),
 ):
     """Process chat completion request with HAIA agent.
 
@@ -148,7 +177,9 @@ async def chat_completions(
     Args:
         request: Chat completion request with messages and parameters
         agent: PydanticAI agent instance
+        tracker: ConversationTracker for boundary detection
         correlation_id: Correlation ID for request tracing
+        conversation_id: Conversation ID for boundary detection
 
     Returns:
         ChatCompletionResponse for non-streaming, StreamingResponse for streaming
@@ -158,8 +189,33 @@ async def chat_completions(
     """
     logger.info(
         f"[{correlation_id}] Processing chat completion request: "
-        f"model={request.model}, messages={len(request.messages)}, stream={request.stream}"
+        f"model={request.model}, messages={len(request.messages)}, "
+        f"stream={request.stream}, conversation_id={conversation_id}"
     )
+
+    # Process boundary detection BEFORE agent execution
+    try:
+        # Convert request messages to simple dict format for tracker
+        message_dicts = [
+            {"role": msg.role, "content": msg.content} for msg in request.messages
+        ]
+
+        # Check for conversation boundary
+        boundary_result = await tracker.process_request(conversation_id, message_dicts)
+
+        if boundary_result.detected:
+            logger.info(
+                f"[{correlation_id}] Conversation boundary detected: "
+                f"reason={boundary_result.reason}, "
+                f"idle={boundary_result.idle_duration_seconds}s"
+            )
+
+    except Exception as e:
+        # Log error but don't block the chat request
+        logger.error(
+            f"[{correlation_id}] Error in boundary detection: {e}",
+            exc_info=True,
+        )
 
     # Check streaming mode
     if request.stream:
