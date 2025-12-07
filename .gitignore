@@ -52,6 +52,9 @@ haia_profile.yml
 *_profile.yml
 .haia/
 
+# Specification files (contain personal/private infrastructure details)
+specs/
+
 # Logs and databases
 *.log
 *.sqlite
