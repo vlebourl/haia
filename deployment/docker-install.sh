@@ -108,7 +108,7 @@ fi
 echo -e "${YELLOW}[6/7]${NC} Applying Neo4j schema..."
 if [ -f "${PROJECT_ROOT}/database/schema/init-schema.cypher" ]; then
     docker cp "${PROJECT_ROOT}/database/schema/init-schema.cypher" haia-neo4j:/tmp/init-schema.cypher
-    $DOCKER_COMPOSE -f deployment/docker-compose.yml exec -T neo4j cypher-shell -u neo4j -p "$(grep NEO4J_PASSWORD ${PROJECT_ROOT}/.env | cut -d '=' -f2)" < "${PROJECT_ROOT}/database/schema/init-schema.cypher"
+    $DOCKER_COMPOSE -f deployment/docker-compose.yml --env-file "${PROJECT_ROOT}/.env" exec -T neo4j cypher-shell -u neo4j -p "$(grep NEO4J_PASSWORD ${PROJECT_ROOT}/.env | cut -d '=' -f2)" < "${PROJECT_ROOT}/database/schema/init-schema.cypher"
     echo -e "${GREEN}✓ Schema applied${NC}"
 else
     echo -e "${YELLOW}! Schema file not found (skipping)${NC}"
