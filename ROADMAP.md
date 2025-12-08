@@ -7,7 +7,7 @@
 
 This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Features are organized by phase, with dependencies clearly marked.
 
-**Current Status**: Phase 1 MVP Complete - OpenAI-compatible API with streaming, conversation boundary detection, and Neo4j memory infrastructure operational.
+**Current Status**: Phase 1 MVP Complete - OpenAI-compatible API with streaming, conversation boundary detection, Neo4j memory infrastructure, and automatic memory extraction operational. **Memory retrieval and usage in conversations (Phase 2) is next.**
 
 ## Roadmap Phases
 
@@ -180,7 +180,90 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
+#### [P1] Memory Extraction Engine ✅
+
+**Status**: COMPLETE (PR #8, 2025-12-08)
+
+**Description**: LLM-based automatic memory extraction from conversation transcripts using PydanticAI with multi-factor confidence scoring. Extracts 5 memory types (preference, personal_fact, technical_context, decision, correction) and stores them in Neo4j graph database.
+
+**User Value**: HAIA automatically learns from conversations, extracting preferences, technical context, and decisions without manual input. Memories are stored with confidence scores for future retrieval.
+
+**Implementation Approach**:
+- ExtractionService: PydanticAI agent with structured output (ExtractionResult)
+- Multi-factor confidence scoring algorithm:
+  - Base confidence from LLM (0.0-1.0)
+  - Explicit statement boost (+0.1)
+  - Multi-mention boost (+0.05 per mention, max +0.2)
+  - Contradiction penalty (-0.3)
+  - Correction override (fixed 0.8)
+  - Selective/aggressive strategy (≥0.4 threshold)
+- MemoryStorageService: Async Neo4j persistence with graph relationships
+- Integration with ConversationTracker for automatic boundary-triggered extraction
+- Configuration: EXTRACTION_MODEL, EXTRACTION_MIN_CONFIDENCE environment variables
+- Located in: `src/haia/extraction/`, `src/haia/services/memory_storage.py`
+
+**Test Coverage**:
+- 52 unit tests (models, confidence scoring)
+- 9 integration tests with real Anthropic API
+- End-to-end validation with Docker stack
+
+**Constitution Compliance**:
+- Type Safety: All extraction data structures use Pydantic models
+- Async-First: All extraction and storage operations are async
+- Model-Agnostic: Works with any LLM (Anthropic or Ollama)
+- Observability: All extraction operations logged with metadata
+
+**Effort Estimate**: L - LLM integration, confidence algorithm, comprehensive testing
+
+**Priority**: P1 - Foundation for intelligent memory system
+
+**Note**: Extracted memories are stored but NOT YET USED in conversations. Memory retrieval and context injection coming in Phase 2 (Sessions 8-9).
+
+---
+
 ### Phase 2: Core Features [Planned]
+
+#### [P2] Memory Retrieval System [Next - Session 8]
+
+**Description**: Embedding-based semantic search for relevant memories. Query Neo4j using vector similarity to find contextually relevant memories for ongoing conversations.
+
+**User Value**: HAIA can find and use relevant memories from past conversations, providing personalized responses based on learned preferences and context.
+
+**Implementation Approach**:
+- OpenAI embeddings API for memory content vectorization
+- Neo4j vector index for similarity search
+- Memory retrieval service with relevance scoring
+- Top-K retrieval with configurable threshold
+- Located in: `src/haia/retrieval/`
+
+**Dependencies**:
+- ✅ Memory Extraction Engine (Session 7)
+- ✅ Neo4j Memory Infrastructure (Session 6)
+- 📦 OpenAI API for embeddings
+
+**Priority**: P2 - Required for memories to be useful
+
+---
+
+#### [P2] Context Integration [Session 9]
+
+**Description**: Inject retrieved memories into conversation context, augmenting the agent's system prompt with relevant learned information.
+
+**User Value**: HAIA remembers your preferences and provides personalized responses. "Use Docker" → HAIA automatically suggests Docker-based solutions.
+
+**Implementation Approach**:
+- Memory injection in chat endpoint before agent execution
+- Dynamic system prompt augmentation with top memories
+- Memory source attribution in responses
+- Located in: `src/haia/api/routes/chat.py`, `src/haia/context/`
+
+**Dependencies**:
+- ✅ Memory Extraction Engine (Session 7)
+- ⏳ Memory Retrieval System (Session 8)
+
+**Priority**: P2 - Completes the memory learning loop
+
+---
 
 #### [P2] Basic Proxmox Integration
 
@@ -371,7 +454,51 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
+### ✅ Memory Extraction Engine (Session 7)
+
+**Completed**: 2025-12-08
+**PR**: #8
+**Tests**: 52 unit + 9 integration = 61 passing
+
+**Description**: Automatic memory extraction from conversations using LLM-based analysis with multi-factor confidence scoring and Neo4j graph storage.
+
+**Implementation**:
+- ExtractionService with PydanticAI structured output
+- ConfidenceCalculator with multi-factor algorithm (explicit boost, multi-mention, contradiction penalty)
+- MemoryStorageService for Neo4j graph persistence
+- 5 memory types: preference, personal_fact, technical_context, decision, correction
+- Selective/aggressive extraction strategy (≥0.4 confidence threshold)
+- Automatic boundary-triggered extraction via ConversationTracker
+- Configurable model and threshold via environment variables
+- Located in: `src/haia/extraction/`, `src/haia/services/memory_storage.py`
+
+**Key Achievements**:
+- ✅ LLM-based extraction with structured output
+- ✅ Multi-factor confidence scoring (8 factors)
+- ✅ Neo4j graph database persistence
+- ✅ Automatic extraction on conversation boundaries
+- ✅ Comprehensive test coverage (61 tests)
+- ✅ Production-ready deployment (Docker Compose stack)
+
+**Note**: Memories are extracted and stored, but not yet retrieved or used in conversations. That's coming in Sessions 8-9 (Memory Retrieval and Context Integration).
+
+---
+
 ## Changelog
+
+- **2025-12-08**: ✅ **Completed Memory Extraction Engine (Session 7)**
+  - ✅ Memory Extraction Engine (Session 7): 61 tests passing, PR #8 merged
+    - LLM-based extraction with PydanticAI structured output
+    - Multi-factor confidence scoring (8 factors, ≥0.4 threshold)
+    - MemoryStorageService for Neo4j graph persistence
+    - 5 memory types: preference, personal_fact, technical_context, decision, correction
+    - Automatic boundary-triggered extraction
+    - Configurable model and threshold via environment variables
+  - **Note**: Memories are extracted and stored, but NOT YET USED in conversations
+    - Memory retrieval (Session 8) and context injection (Session 9) coming next
+    - This completes the "learning" part; "using" the learned memories is Phase 2
+  - Updated deployment documentation and scripts
+  - Fixed docker-install.sh to use HAIA_PORT from .env
 
 - **2025-12-06**: ✅ **Completed OpenAI Chat API - Architectural Pivot to Stateless Design**
   - ✅ OpenAI-Compatible Chat API (Feature 003): Streaming and non-streaming support, PR #3 merged
