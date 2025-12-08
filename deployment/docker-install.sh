@@ -117,12 +117,15 @@ fi
 # Step 7: Health checks
 echo -e "${YELLOW}[7/7]${NC} Running health checks..."
 
+# Get HAIA_PORT from .env (default to 8888 if not set)
+HAIA_PORT=$(grep -E "^HAIA_PORT=" "${PROJECT_ROOT}/.env" | cut -d '=' -f2 || echo "8888")
+
 # Wait for HAIA to be ready
 HAIA_WAIT=0
 MAX_HAIA_WAIT=30
 
 while [ $HAIA_WAIT -lt $MAX_HAIA_WAIT ]; do
-    if curl -f http://localhost:8000/health &> /dev/null; then
+    if curl -f http://localhost:${HAIA_PORT}/health &> /dev/null; then
         echo -e "${GREEN}✓ HAIA health check passed${NC}"
         break
     fi
@@ -140,11 +143,11 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  Deployment Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo -e "HAIA API:        ${GREEN}http://localhost:8000${NC}"
+echo -e "HAIA API:        ${GREEN}http://localhost:${HAIA_PORT}${NC}"
 echo -e "Neo4j Browser:   ${GREEN}http://localhost:7474${NC}"
 echo ""
 echo "Next steps:"
-echo "  1. Test API:        curl http://localhost:8000/health"
+echo "  1. Test API:        curl http://localhost:${HAIA_PORT}/health"
 echo "  2. View logs:       $DOCKER_COMPOSE -f deployment/docker-compose.yml logs -f"
 echo "  3. Stop services:   $DOCKER_COMPOSE -f deployment/docker-compose.yml down"
 echo ""

@@ -199,21 +199,29 @@ MATCH (c:Conversation)-[:CONTAINS_MEMORY]->(m:Memory) RETURN c, m
 
 ### Option 1: Docker Compose (Recommended)
 
-```bash
-# 1. Configure environment
-cp .env.example .env
-nano .env  # Edit NEO4J_PASSWORD and other settings
+**Docker Compose is the recommended deployment method**, especially for Memory Extraction (Session 7+) which requires Neo4j.
 
-# 2. Deploy stack
+```bash
+# 1. Clone repository
+git clone https://github.com/vlebourl/haia.git
+cd haia
+
+# 2. Configure environment
+cp .env.example .env
+nano .env  # Edit ANTHROPIC_API_KEY, NEO4J_PASSWORD, HAIA_PORT, etc.
+
+# 3. Deploy stack (one command!)
 chmod +x deployment/docker-install.sh
 ./deployment/docker-install.sh
 
-# 3. Verify deployment
-curl http://localhost:8000/health
+# 4. Verify deployment
+curl http://localhost:8888/health  # Use your configured HAIA_PORT
 open http://localhost:7474  # Neo4j Browser
 ```
 
-### Option 2: Systemd Service (Automated Installation)
+### Option 2: Systemd Service (Legacy - No Memory Extraction)
+
+**Note:** Systemd deployment doesn't include Neo4j, so memory extraction features won't work. Use Docker Compose instead.
 
 ```bash
 # Download and run installation script
@@ -229,7 +237,7 @@ sudo systemctl start haia
 sudo systemctl status haia
 ```
 
-### Option 2: Manual Installation
+### Option 3: Manual Installation
 
 Follow the detailed steps in [DEPLOYMENT.md](DEPLOYMENT.md).
 
