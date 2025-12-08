@@ -1,0 +1,76 @@
+[
+  {
+    "conversation_id": "test_explicit_preference",
+    "description": "Explicit preference statement",
+    "messages": [
+      {"content": "I prefer Docker over Podman for my homelab", "timestamp": "2025-12-08T10:00:00Z", "speaker": "user"},
+      {"content": "Got it, you prefer Docker for containerization", "timestamp": "2025-12-08T10:00:05Z", "speaker": "assistant"}
+    ],
+    "start_time": "2025-12-08T10:00:00Z",
+    "end_time": "2025-12-08T10:00:05Z",
+    "message_count": 2,
+    "expected_memories": [
+      {"type": "preference", "confidence_min": 0.7, "content_contains": "Docker"}
+    ]
+  },
+  {
+    "conversation_id": "test_technical_context",
+    "description": "Infrastructure description",
+    "messages": [
+      {"content": "My setup has a Proxmox cluster with 3 nodes", "timestamp": "2025-12-08T11:00:00Z", "speaker": "user"},
+      {"content": "Interesting, a 3-node Proxmox cluster", "timestamp": "2025-12-08T11:00:03Z", "speaker": "assistant"},
+      {"content": "Yes, and they're running Ceph storage", "timestamp": "2025-12-08T11:00:10Z", "speaker": "user"}
+    ],
+    "start_time": "2025-12-08T11:00:00Z",
+    "end_time": "2025-12-08T11:00:10Z",
+    "message_count": 3,
+    "expected_memories": [
+      {"type": "technical_context", "confidence_min": 0.6, "content_contains": "Proxmox"}
+    ]
+  },
+  {
+    "conversation_id": "test_personal_fact",
+    "description": "Personal interest",
+    "messages": [
+      {"content": "I'm really into home automation", "timestamp": "2025-12-08T12:00:00Z", "speaker": "user"},
+      {"content": "That's great! What kind of automation are you working on?", "timestamp": "2025-12-08T12:00:03Z", "speaker": "assistant"},
+      {"content": "Mainly smart lights and climate control", "timestamp": "2025-12-08T12:00:08Z", "speaker": "user"}
+    ],
+    "start_time": "2025-12-08T12:00:00Z",
+    "end_time": "2025-12-08T12:00:08Z",
+    "message_count": 3,
+    "expected_memories": [
+      {"type": "personal_fact", "confidence_min": 0.6, "content_contains": "automation"}
+    ]
+  },
+  {
+    "conversation_id": "test_decision",
+    "description": "Decision with rationale",
+    "messages": [
+      {"content": "I decided to migrate from Kubernetes to Docker Swarm", "timestamp": "2025-12-08T13:00:00Z", "speaker": "user"},
+      {"content": "What drove that decision?", "timestamp": "2025-12-08T13:00:02Z", "speaker": "assistant"},
+      {"content": "Too complex for my small homelab", "timestamp": "2025-12-08T13:00:05Z", "speaker": "user"}
+    ],
+    "start_time": "2025-12-08T13:00:00Z",
+    "end_time": "2025-12-08T13:00:05Z",
+    "message_count": 3,
+    "expected_memories": [
+      {"type": "decision", "confidence_min": 0.7, "content_contains": "Docker Swarm"}
+    ]
+  },
+  {
+    "conversation_id": "test_correction",
+    "description": "Correction of previous statement",
+    "messages": [
+      {"content": "I use Podman for containers", "timestamp": "2025-12-08T14:00:00Z", "speaker": "user"},
+      {"content": "Got it, you use Podman", "timestamp": "2025-12-08T14:00:02Z", "speaker": "assistant"},
+      {"content": "Actually, I meant Docker not Podman", "timestamp": "2025-12-08T14:00:10Z", "speaker": "user"}
+    ],
+    "start_time": "2025-12-08T14:00:00Z",
+    "end_time": "2025-12-08T14:00:10Z",
+    "message_count": 3,
+    "expected_memories": [
+      {"type": "correction", "confidence_min": 0.8, "content_contains": "Docker"}
+    ]
+  }
+]

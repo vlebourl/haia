@@ -166,6 +166,42 @@ deployment/
 - **Input Validation**: All user inputs validated via Pydantic before processing
 - **No Arbitrary Code Execution**: The agent cannot execute arbitrary shell commands unless explicitly whitelisted
 
+## Memory Extraction System
+
+HAIA automatically extracts and stores user preferences, technical context, and other memories from conversations:
+
+**Architecture**:
+- **Boundary Detection**: Hybrid heuristic detects conversation endings (>10min idle + message drop or hash change)
+- **Extraction Service**: PydanticAI agent with structured output extracts memories using LLM
+- **Neo4j Storage**: Memories stored as graph nodes with relationships to conversations
+
+**Confidence Scoring**:
+- Multi-factor algorithm combining LLM scores with deterministic boosts/penalties
+- Base threshold: 0.4 (selective/aggressive strategy)
+- Explicit statements: +0.1 boost
+- Multiple mentions: +0.05 per mention (max +0.2)
+- Contradictions: -0.3 penalty
+- Corrections: Fixed 0.8 confidence
+
+**Memory Categories**:
+1. `preference` - Tool choices, workflow preferences, conventions
+2. `personal_fact` - Personal information, interests, hobbies
+3. `technical_context` - Infrastructure details, dependencies, architectures
+4. `decision` - Architecture decisions with rationale
+5. `correction` - Corrections of previously stated information
+
+**Configuration** (`.env`):
+- `EXTRACTION_MODEL`: Model for extraction (defaults to `HAIA_MODEL` - Haiku recommended for cost)
+- `EXTRACTION_MIN_CONFIDENCE`: Minimum confidence threshold (default: 0.4)
+
+**Location**:
+- Models: `src/haia/extraction/models.py`
+- Confidence: `src/haia/extraction/confidence.py`
+- Prompts: `src/haia/extraction/prompts.py`
+- Service: `src/haia/extraction/extractor.py`
+- Storage: `src/haia/services/memory_storage.py`
+- Integration: `src/haia/memory/tracker.py:_extract_and_store_memories()`
+
 ## Development Workflow
 
 This project uses **spec-kit** for structured development:
@@ -197,6 +233,8 @@ All configuration managed through `pydantic-settings` with environment variables
 - Graceful degradation if LLM is unavailable (cached/static responses for basic queries)
 
 ## Active Technologies
+- Python 3.11+ + PydanticAI 1.25.1+, pydantic, httpx (for async operations) (007-memory-extraction)
+- N/A (extraction service only - does not persist data, outputs JSON) (007-memory-extraction)
 
 ### Memory System (006-docker-neo4j-stack)
 - **Neo4j 5.15 Graph Database** with async Python driver (`neo4j` package)

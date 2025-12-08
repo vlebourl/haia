@@ -11,7 +11,9 @@ from haia.agent import create_agent
 from haia.api.deps import set_agent, set_conversation_tracker, set_neo4j_service
 from haia.api.routes import chat
 from haia.config import settings
+from haia.extraction import ExtractionService
 from haia.memory.tracker import ConversationTracker
+from haia.services.memory_storage import MemoryStorageService
 from haia.services.neo4j import Neo4jService
 
 # Configure logging - simpler format without correlation_id for startup logs
@@ -45,18 +47,6 @@ async def lifespan(app: FastAPI):
     agent = create_agent(settings.haia_model)
     set_agent(agent)
 
-    # Initialize conversation tracker for boundary detection
-    logger.info(
-        f"Initializing conversation tracker (storage: {settings.transcript_storage_dir})"
-    )
-    tracker = ConversationTracker(
-        storage_dir=settings.transcript_storage_dir,
-        idle_threshold_minutes=settings.boundary_idle_threshold_minutes,
-        message_drop_threshold=settings.boundary_message_drop_threshold,
-        max_tracked_conversations=settings.boundary_max_tracked_conversations,
-    )
-    set_conversation_tracker(tracker)
-
     # Initialize Neo4j connection
     logger.info(f"Connecting to Neo4j at {settings.neo4j_uri}")
     neo4j_service = Neo4jService(
@@ -67,6 +57,32 @@ async def lifespan(app: FastAPI):
     await neo4j_service.connect()
     set_neo4j_service(neo4j_service)
     logger.info("Neo4j connection established")
+
+    # Initialize memory extraction service
+    extraction_model = settings.extraction_model or settings.haia_model
+    logger.info(f"Initializing memory extraction service (model: {extraction_model})")
+    extraction_service = ExtractionService(
+        model=extraction_model,
+        min_confidence=settings.extraction_min_confidence,
+    )
+
+    # Initialize memory storage service
+    logger.info("Initializing memory storage service")
+    memory_storage_service = MemoryStorageService(neo4j_service=neo4j_service)
+
+    # Initialize conversation tracker for boundary detection
+    logger.info(
+        f"Initializing conversation tracker (storage: {settings.transcript_storage_dir})"
+    )
+    tracker = ConversationTracker(
+        storage_dir=settings.transcript_storage_dir,
+        idle_threshold_minutes=settings.boundary_idle_threshold_minutes,
+        message_drop_threshold=settings.boundary_message_drop_threshold,
+        max_tracked_conversations=settings.boundary_max_tracked_conversations,
+        extraction_service=extraction_service,
+        memory_storage_service=memory_storage_service,
+    )
+    set_conversation_tracker(tracker)
 
     logger.info("Server startup complete - ready to accept requests")
 
