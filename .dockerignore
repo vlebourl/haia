@@ -1,0 +1,79 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment and secrets
+.env
+.env.*
+*.env
+.env.backup*
+secrets.json
+*.key
+*.pem
+
+# Profiles (personal data)
+*_profile.yaml
+*_profile.yml
+haia_profile.*
+
+# Specification files (contain personal details)
+specs/
+.specify/
+
+# Tests and development
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Documentation (but keep README.md for package build)
+docs/
+CLAUDE.md
+deployment/README.md
+deployment/DEPLOYMENT.md
+
+# Docker files themselves
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Database files (not needed in container)
+*.db
+*.sqlite
+
+# Backups
+*.backup
+*.bak

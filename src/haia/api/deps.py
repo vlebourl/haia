@@ -8,6 +8,7 @@ from fastapi import Header
 from pydantic_ai import Agent
 
 from haia.memory.tracker import ConversationTracker
+from haia.services.neo4j import Neo4jService
 
 # Correlation ID context variable for request tracing
 correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="unknown")
@@ -17,6 +18,9 @@ _agent: Agent | None = None
 
 # Global conversation tracker instance (initialized at startup)
 _conversation_tracker: ConversationTracker | None = None
+
+# Global Neo4j service instance (initialized at startup)
+_neo4j_service: Neo4jService | None = None
 
 # Logger
 logger = logging.getLogger(__name__)
@@ -93,3 +97,27 @@ def set_conversation_tracker(tracker: ConversationTracker) -> None:
     """
     global _conversation_tracker
     _conversation_tracker = tracker
+
+
+def get_neo4j_service() -> Neo4jService:
+    """FastAPI dependency for Neo4j service injection.
+
+    Returns:
+        Neo4jService instance
+
+    Raises:
+        RuntimeError: If service not initialized (server startup failed)
+    """
+    if _neo4j_service is None:
+        raise RuntimeError("Neo4j service not initialized - server startup may have failed")
+    return _neo4j_service
+
+
+def set_neo4j_service(service: Neo4jService) -> None:
+    """Set the global Neo4j service instance (called during startup).
+
+    Args:
+        service: Configured Neo4jService
+    """
+    global _neo4j_service
+    _neo4j_service = service

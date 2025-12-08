@@ -1,0 +1,27 @@
+# HAIA Development Docker Compose Configuration
+# Extends docker-compose.yml for local development workflow
+
+# Usage: docker compose -f deployment/docker-compose.yml -f deployment/docker-compose.dev.yml up -d
+
+services:
+  # Only run Neo4j in container for development
+  # HAIA will run natively on host for fast iteration
+  neo4j:
+    ports:
+      # Expose Neo4j HTTP interface for browser access
+      - "7474:7474"
+      # Expose Bolt protocol for native HAIA connection
+      - "7687:7687"
+    environment:
+      # Enable debug logging for development
+      NEO4J_server_logs_query_enabled: "INFO"
+      NEO4J_server_logs_http_enabled: "INFO"
+    volumes:
+      # Mount local backups directory for easy access
+      - ../database/backups:/backups:rw
+
+  # HAIA service override: DO NOT start in dev mode
+  # Run HAIA natively instead: uv run uvicorn haia.main:app --reload
+  haia:
+    profiles:
+      - production-only  # This prevents haia from starting in dev mode

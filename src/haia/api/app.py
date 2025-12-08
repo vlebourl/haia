@@ -8,10 +8,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from haia.agent import create_agent
-from haia.api.deps import set_agent, set_conversation_tracker
+from haia.api.deps import set_agent, set_conversation_tracker, set_neo4j_service
 from haia.api.routes import chat
 from haia.config import settings
 from haia.memory.tracker import ConversationTracker
+from haia.services.neo4j import Neo4jService
 
 # Configure logging - simpler format without correlation_id for startup logs
 logging.basicConfig(
@@ -56,12 +57,25 @@ async def lifespan(app: FastAPI):
     )
     set_conversation_tracker(tracker)
 
+    # Initialize Neo4j connection
+    logger.info(f"Connecting to Neo4j at {settings.neo4j_uri}")
+    neo4j_service = Neo4jService(
+        uri=settings.neo4j_uri,
+        user=settings.neo4j_user,
+        password=settings.neo4j_password,
+    )
+    await neo4j_service.connect()
+    set_neo4j_service(neo4j_service)
+    logger.info("Neo4j connection established")
+
     logger.info("Server startup complete - ready to accept requests")
 
     yield  # Application runs here
 
     # Shutdown
     logger.info("Shutting down HAIA Chat API server...")
+    await neo4j_service.close()
+    logger.info("Neo4j connection closed")
     logger.info("Server shutdown complete")
 
 

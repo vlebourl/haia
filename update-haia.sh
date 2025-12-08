@@ -12,6 +12,16 @@ PROD_DIR="/opt/haia"
 HAIA_USER="haia"
 HAIA_GROUP="haia"
 
+# Update HAIA code from git
+if [ -d "$PROD_DIR/.git" ]; then
+    echo "Updating HAIA code from git..."
+    cd "$PROD_DIR"
+    sudo -u $HAIA_USER git pull
+    echo "✓ Code updated"
+else
+    echo "⚠ $PROD_DIR is not a git repository"
+fi
+
 # Copy .env file
 if [ -f "$DEV_DIR/.env" ]; then
     echo "Copying .env file..."
