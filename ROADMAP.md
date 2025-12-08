@@ -1,13 +1,13 @@
 # HAIA Development Roadmap
 
-**Last Updated**: 2025-11-30
-**Version**: 0.1.0
+**Last Updated**: 2025-12-08
+**Version**: 0.2.0
 
 ## Overview
 
 This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Features are organized by phase, with dependencies clearly marked.
 
-**Current Focus**: Implementing the OpenAI-compatible Chat API with streaming support (Phase 1 MVP).
+**Current Status**: Phase 1 MVP Complete - OpenAI-compatible API with streaming, conversation boundary detection, and Neo4j memory infrastructure operational.
 
 ## Roadmap Phases
 
@@ -68,9 +68,11 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
-### Phase 1: MVP [Next]
+### Phase 1: MVP [Complete]
 
-#### [P1] OpenAI-Compatible Chat API with Streaming
+#### [P1] OpenAI-Compatible Chat API with Streaming ✅
+
+**Status**: COMPLETE (PR #5, 2025-12-07)
 
 **Description**: FastAPI server exposing `/v1/chat/completions` endpoint with SSE streaming support, compatible with OpenWebUI and other OpenAI clients. **Stateless design** - client manages conversation history.
 
@@ -105,6 +107,76 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 **Effort Estimate**: M - Streaming implementation, OpenAI format compatibility, error handling
 
 **Priority**: P1 - Core MVP feature, highest user value
+
+---
+
+#### [P1] Conversation Boundary Detection ✅
+
+**Status**: COMPLETE (PR #6, 2025-12-07)
+
+**Description**: Hybrid heuristic system to detect when conversations naturally end, enabling automatic memory extraction. Uses time gaps, message patterns, and content analysis to identify conversation boundaries without user intervention.
+
+**User Value**: Enables HAIA to automatically capture and process conversation transcripts for memory extraction, creating a seamless learning experience.
+
+**Implementation Approach**:
+- Request metadata tracking (timestamps, message counts, content hashes)
+- Hybrid detection algorithm combining:
+  - Time-based triggers (30min gap → boundary likely)
+  - Pattern analysis (conversation flow indicators)
+  - Content similarity scoring
+- Transcript accumulation in memory with conversation_id tracking
+- Boundary event logging for observability
+- Internal conversation_id generation (IP + User-Agent hash) for OpenWebUI compatibility
+- Located in: `src/haia/api/routes/chat.py`
+
+**Constitution Compliance**:
+- Privacy: No persistent storage of transcripts (memory extraction stores structured facts only)
+- Observability: All boundary detections logged with metadata
+- Type Safety: All detection logic uses typed data structures
+
+**Effort Estimate**: M - Algorithm development, testing edge cases, integration with chat endpoint
+
+**Priority**: P1 - Foundation for memory system
+
+---
+
+#### [P1] Neo4j Memory Infrastructure ✅
+
+**Status**: COMPLETE (PR #7, 2025-12-08)
+
+**Description**: Docker Compose stack with HAIA + Neo4j 5.15 graph database. Implements complete memory graph schema (7 node types, 9 relationship types) with async Python CRUD operations, automated backups, and hybrid deployment support.
+
+**User Value**: Provides persistent memory storage foundation, enabling HAIA to remember user preferences, infrastructure context, and past decisions across conversations.
+
+**Implementation Approach**:
+- Docker Compose orchestration:
+  - HAIA container (FastAPI, Python 3.11, uvicorn)
+  - Neo4j 5.15 container (official image with APOC plugin)
+  - Shared Docker network with health checks
+- Graph schema with 7 node types:
+  - Person, Interest, Infrastructure, TechPreference, Fact, Decision, Conversation
+- 9 relationship types (INTERESTED_IN, OWNS, PREFERS, HAS_FACT, MADE_DECISION, etc.)
+- Async Neo4j Python driver with connection pooling (50 connections)
+- Complete CRUD operations with retry logic and exponential backoff
+- Volume persistence (neo4j-data, neo4j-logs, neo4j-backups)
+- Automated backup/restore scripts with 7-day rotation
+- Hybrid deployment: Production (full Docker stack) vs Development (Neo4j container + native HAIA)
+- One-command deployment via `./deployment/docker-install.sh`
+- Located in: `deployment/`, `database/schema/`, `src/haia/services/neo4j.py`, `src/haia/models/graph.py`
+
+**Test Coverage**:
+- 19 integration tests (full stack, schema validation, performance benchmarks)
+- 50+ unit tests (CRUD operations, error handling, concurrent operations)
+
+**Constitution Compliance**:
+- Type Safety: All graph nodes use Pydantic models
+- Async-First: Neo4j driver uses async mode throughout
+- Observability: Connection status exposed via health endpoint
+- Security: Neo4j credentials via environment variables only
+
+**Effort Estimate**: L - Full stack setup, schema design, async operations, comprehensive testing
+
+**Priority**: P1 - Critical infrastructure for memory system
 
 ---
 
