@@ -1,0 +1,98 @@
+services:
+  haia:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    container_name: haia-api
+    restart: unless-stopped
+    ports:
+      - "${HAIA_PORT:-8000}:8000"
+    networks:
+      - haia-network
+    volumes:
+      - haia-logs:/app/logs
+    environment:
+      # LLM Configuration
+      HAIA_MODEL: ${HAIA_MODEL}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-30.0}
+
+      # System Prompt Configuration
+      HAIA_SYSTEM_PROMPT: ${HAIA_SYSTEM_PROMPT:-}
+      HAIA_PROFILE_PATH: ${HAIA_PROFILE_PATH}
+
+      # Application Configuration
+      CONTEXT_WINDOW_SIZE: ${CONTEXT_WINDOW_SIZE:-20}
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:///./haia.db}
+      HOST: "0.0.0.0"
+      PORT: "8000"
+
+      # Conversation Boundary Detection
+      TRANSCRIPT_STORAGE_DIR: ${TRANSCRIPT_STORAGE_DIR:-data/transcripts}
+      BOUNDARY_IDLE_THRESHOLD_MINUTES: ${BOUNDARY_IDLE_THRESHOLD_MINUTES:-10}
+      BOUNDARY_MESSAGE_DROP_THRESHOLD: ${BOUNDARY_MESSAGE_DROP_THRESHOLD:-0.5}
+      BOUNDARY_MAX_TRACKED_CONVERSATIONS: ${BOUNDARY_MAX_TRACKED_CONVERSATIONS:-1000}
+
+      # Neo4j Configuration
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  neo4j:
+    image: neo4j:5.15
+    container_name: haia-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    networks:
+      - haia-network
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+      - neo4j-backups:/backups
+    environment:
+      # Authentication
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD}
+
+      # Plugins (APOC and Graph Data Science)
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+
+      # Memory Configuration (4GB heap)
+      NEO4J_server_memory_heap_initial__size: "2G"
+      NEO4J_server_memory_heap_max__size: "4G"
+      NEO4J_server_memory_pagecache_size: "1G"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+networks:
+  haia-network:
+    driver: bridge
+    name: haia-network
+
+volumes:
+  neo4j-data:
+    name: haia_neo4j-data
+  neo4j-logs:
+    name: haia_neo4j-logs
+  neo4j-backups:
+    name: haia_neo4j-backups
+  haia-logs:
+    name: haia_haia-logs

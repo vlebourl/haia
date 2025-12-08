@@ -14,7 +14,12 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic_ai import Agent
 
-from haia.api.deps import get_agent, get_conversation_tracker, get_correlation_id
+from haia.api.deps import (
+    get_agent,
+    get_conversation_tracker,
+    get_correlation_id,
+    get_neo4j_service,
+)
 from haia.api.models.chat import (
     ChatCompletionChunk,
     ChatCompletionRequest,
@@ -22,6 +27,7 @@ from haia.api.models.chat import (
     TokenUsage,
 )
 from haia.memory.tracker import ConversationTracker
+from haia.services.neo4j import Neo4jService
 
 logger = logging.getLogger(__name__)
 
@@ -301,4 +307,19 @@ async def list_models():
                 "owned_by": "haia",
             }
         ],
+    }
+
+
+@router.get("/health")
+async def health_check(neo4j_service: Neo4jService = Depends(get_neo4j_service)):
+    """Health check endpoint with Neo4j connection status.
+
+    Returns:
+        Health status with Neo4j connectivity information
+    """
+    neo4j_healthy = await neo4j_service.health_check()
+
+    return {
+        "status": "healthy" if neo4j_healthy else "degraded",
+        "neo4j": "connected" if neo4j_healthy else "disconnected",
     }

@@ -70,6 +70,20 @@ class Settings(BaseSettings):
         le=100000,
     )
 
+    # Neo4j Configuration
+    neo4j_uri: str = Field(
+        "bolt://localhost:7687",
+        description="Neo4j connection URI",
+    )
+    neo4j_user: str = Field(
+        "neo4j",
+        description="Neo4j username",
+    )
+    neo4j_password: str = Field(
+        ...,
+        description="Neo4j password (required)",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )

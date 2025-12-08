@@ -95,6 +95,12 @@ src/haia/
 ├── deps.py               # Dependency injection container
 ├── main.py               # Entry point
 │
+├── models/               # Pydantic models
+│   └── memory.py         # Neo4j graph entity models (7 node types)
+│
+├── services/             # Core services
+│   └── neo4j.py          # Neo4j async service (CRUD, relationships)
+│
 ├── tools/                # Custom @agent.tool functions
 │   ├── proxmox.py        # Proxmox VE operations
 │   ├── homeassistant.py  # Home Assistant integration
@@ -114,6 +120,24 @@ src/haia/
     ├── base.py           # Abstract notifier
     ├── telegram.py
     └── discord.py
+
+database/
+├── schema/               # Neo4j schema definitions
+│   ├── init-schema.cypher   # Constraints, indexes, schema version
+│   ├── verify-schema.cypher # Verification queries
+│   └── README.md            # Schema documentation (7 node types)
+│
+└── backups/              # Backup automation
+    ├── backup.sh         # Automated backup with 7-day rotation
+    ├── restore.sh        # Full database restoration
+    └── README.md         # Backup/recovery procedures
+
+deployment/
+├── Dockerfile            # HAIA production image
+├── docker-compose.yml    # Production stack (HAIA + Neo4j)
+├── docker-compose.dev.yml # Development overrides (hybrid mode)
+├── docker-install.sh     # Single-command deployment
+└── README.md             # Deployment documentation
 ```
 
 ## Technical Constraints
@@ -173,6 +197,34 @@ All configuration managed through `pydantic-settings` with environment variables
 - Graceful degradation if LLM is unavailable (cached/static responses for basic queries)
 
 ## Active Technologies
+
+### Memory System (006-docker-neo4j-stack)
+- **Neo4j 5.15 Graph Database** with async Python driver (`neo4j` package)
+  - Connection pooling (50 connections) with exponential backoff retry
+  - Docker volume persistence: `neo4j-data`, `neo4j-logs`, `neo4j-backups`
+  - Single-command deployment via `./deployment/docker-install.sh`
+
+- **Graph Schema**: 7 node types with UNIQUE constraints and indexes
+  - Person, Interest, Infrastructure, TechPreference, Fact, Decision, Conversation
+  - 9 relationship types: INTERESTED_IN, OWNS, PREFERS, HAS_FACT, MADE_DECISION, EXTRACTED, DEPENDS_ON, SUPERSEDES, RELATED_TO
+  - Schema versioning with automated verification (database/schema/init-schema.cypher)
+
+- **CRUD Operations**: Type-safe async methods in `Neo4jService`
+  - Generic: create_node, read_node, update_node, delete_node
+  - Specific: create_person, create_interest, create_infrastructure, etc.
+  - Relationships: create_relationship + 9 domain-specific helpers (link_person_interest, link_infrastructure_dependency, etc.)
+
+- **Backup/Recovery**: Automated with 7-day rotation
+  - `database/backups/backup.sh` - neo4j-admin dump with integrity verification
+  - `database/backups/restore.sh` - Full restoration with safety backups
+  - Cron-compatible for daily scheduled backups
+
+- **Development Workflow**: Hybrid deployment mode
+  - Neo4j in Docker container (exposed ports 7474, 7687)
+  - HAIA runs natively for hot-reload (`uv run uvicorn`)
+  - Use `docker compose -f deployment/docker-compose.dev.yml up neo4j`
+
+### Previous Features
 - N/A (stateless client, no persistence in this layer) (001-llm-abstraction)
 - Stateless API design - client manages conversation history (003-openai-chat-api)
 - Versatile companion system prompt - homelab as one capability among many (004-system-prompt-redesign)
