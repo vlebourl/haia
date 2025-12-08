@@ -128,6 +128,73 @@ For Neo4j-native backups, see `database/backups/README.md` (User Story 6).
 
 ---
 
+## Memory Extraction System (Session 7)
+
+HAIA includes automatic memory extraction that captures user preferences and technical context from conversations:
+
+### How It Works
+
+1. **Conversation Boundary Detection**: Detects when a conversation ends based on:
+   - Idle time >10 minutes
+   - Significant message count drop (>50%)
+   - Change in conversation topic (first message hash)
+
+2. **Memory Extraction**: When a boundary is detected:
+   - Transcript is saved to `data/transcripts/`
+   - Memories are extracted using LLM (Claude Haiku by default)
+   - Extracted memories are stored in Neo4j graph database
+
+3. **Memory Types**:
+   - `preference` - Tool choices, workflow preferences
+   - `personal_fact` - Personal information, interests
+   - `technical_context` - Infrastructure details, architectures
+   - `decision` - Architecture decisions with rationale
+   - `correction` - Corrections of previous information
+
+### Configuration
+
+Add to your `.env` file:
+
+```bash
+# Memory Extraction (Optional)
+EXTRACTION_MODEL=               # Defaults to HAIA_MODEL if not set
+EXTRACTION_MIN_CONFIDENCE=0.4   # Minimum confidence threshold (0.0-1.0)
+```
+
+### Monitoring Memory Extraction
+
+```bash
+# View extraction logs
+docker logs haia-api | grep -E "extraction|memories|boundary"
+
+# Query stored memories in Neo4j
+docker exec haia-neo4j cypher-shell -u neo4j -p your_password \
+  "MATCH (m:Memory) RETURN m.type, m.content, m.confidence LIMIT 10"
+
+# Check transcript storage
+docker exec haia-api ls -lh /app/data/transcripts/
+```
+
+### Memory Database Access
+
+Neo4j Browser is available at `http://localhost:7474`:
+- Username: `neo4j`
+- Password: (value from `NEO4J_PASSWORD` in `.env`)
+
+Query examples:
+```cypher
+// View all memories
+MATCH (m:Memory) RETURN m
+
+// Find preferences
+MATCH (m:Memory {type: 'preference'}) RETURN m.content, m.confidence
+
+// View conversation relationships
+MATCH (c:Conversation)-[:CONTAINS_MEMORY]->(m:Memory) RETURN c, m
+```
+
+---
+
 ## Quick Start
 
 ### Option 1: Docker Compose (Recommended)

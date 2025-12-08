@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from haia.memory.boundary import compute_first_message_hash, detect_boundary
 from haia.memory.models import (
@@ -15,6 +16,10 @@ from haia.memory.models import (
     ConversationTranscript,
 )
 from haia.memory.storage import TranscriptStorage
+
+if TYPE_CHECKING:
+    from haia.extraction import ExtractionService
+    from haia.services.memory_storage import MemoryStorageService
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +39,8 @@ class ConversationTracker:
         idle_threshold_minutes: int = 10,
         message_drop_threshold: float = 0.5,
         max_tracked_conversations: int = 1000,
+        extraction_service: "ExtractionService | None" = None,
+        memory_storage_service: "MemoryStorageService | None" = None,
     ):
         """Initialize the conversation tracker.
 
@@ -42,11 +49,15 @@ class ConversationTracker:
             idle_threshold_minutes: Minimum idle time to consider for boundaries
             message_drop_threshold: Minimum message count drop (fraction)
             max_tracked_conversations: Maximum conversations to track (LRU eviction)
+            extraction_service: Optional service for extracting memories from transcripts
+            memory_storage_service: Optional service for storing extracted memories in Neo4j
         """
         self._storage = TranscriptStorage(storage_dir)
         self._idle_threshold_minutes = idle_threshold_minutes
         self._message_drop_threshold = message_drop_threshold
         self._max_tracked_conversations = max_tracked_conversations
+        self._extraction_service = extraction_service
+        self._memory_storage_service = memory_storage_service
 
         # In-memory metadata storage with LRU tracking
         self._metadata: dict[str, ConversationMetadata] = {}
@@ -63,6 +74,7 @@ class ConversationTracker:
                 "idle_threshold_minutes": idle_threshold_minutes,
                 "message_drop_threshold": message_drop_threshold,
                 "max_conversations": max_tracked_conversations,
+                "memory_extraction_enabled": extraction_service is not None,
             },
         )
 
@@ -297,6 +309,40 @@ class ConversationTracker:
                 },
             )
 
+    def _convert_to_extraction_transcript(
+        self, tracker_transcript: ConversationTranscript
+    ):
+        """Convert tracker ConversationTranscript to extraction ConversationTranscript.
+
+        Args:
+            tracker_transcript: Transcript from tracker (haia.memory.models)
+
+        Returns:
+            Transcript for extraction service (haia.extraction.models)
+        """
+        from haia.extraction.models import (
+            ConversationTranscript as ExtractionTranscript,
+        )
+        from haia.extraction.models import Message
+
+        # Convert ChatMessage (role/content) to Message (speaker/content)
+        extraction_messages = [
+            Message(
+                content=msg.content,
+                speaker=msg.role,  # role is already 'user' or 'assistant'
+                timestamp=msg.timestamp,
+            )
+            for msg in tracker_transcript.messages
+        ]
+
+        return ExtractionTranscript(
+            conversation_id=tracker_transcript.conversation_id,
+            messages=extraction_messages,
+            start_time=tracker_transcript.start_time,
+            end_time=tracker_transcript.end_time,
+            message_count=tracker_transcript.message_count,
+        )
+
     async def _handle_boundary_detection(
         self,
         conversation_id: str,
@@ -372,11 +418,73 @@ class ConversationTracker:
                 extra=event.to_log_dict(),
             )
 
+            # Trigger memory extraction if services are available
+            if self._extraction_service and self._memory_storage_service:
+                await self._extract_and_store_memories(transcript)
+
         except Exception as e:
             logger.error(
                 "Failed to store transcript",
                 extra={
                     "conversation_id": conversation_id,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
+
+    async def _extract_and_store_memories(
+        self, transcript: ConversationTranscript
+    ) -> None:
+        """Extract memories from transcript and store in Neo4j.
+
+        Args:
+            transcript: Conversation transcript to extract memories from
+        """
+        try:
+            # Convert transcript format for extraction service
+            extraction_transcript = self._convert_to_extraction_transcript(transcript)
+
+            logger.info(
+                "Starting memory extraction",
+                extra={"conversation_id": transcript.conversation_id},
+            )
+
+            # Extract memories
+            extraction_result = await self._extraction_service.extract_memories(
+                extraction_transcript
+            )
+
+            if not extraction_result.is_successful:
+                logger.warning(
+                    "Memory extraction failed",
+                    extra={
+                        "conversation_id": transcript.conversation_id,
+                        "error": extraction_result.error,
+                    },
+                )
+                return
+
+            # Store memories in Neo4j
+            stored_count = await self._memory_storage_service.store_extraction_result(
+                extraction_result
+            )
+
+            logger.info(
+                "Memory extraction and storage complete",
+                extra={
+                    "conversation_id": transcript.conversation_id,
+                    "memories_extracted": extraction_result.memory_count,
+                    "memories_stored": stored_count,
+                    "extraction_duration": extraction_result.extraction_duration,
+                },
+            )
+
+        except Exception as e:
+            # Don't let extraction errors block conversation flow
+            logger.error(
+                "Failed to extract/store memories",
+                extra={
+                    "conversation_id": transcript.conversation_id,
                     "error": str(e),
                 },
                 exc_info=True,

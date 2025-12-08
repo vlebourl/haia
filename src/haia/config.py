@@ -84,6 +84,18 @@ class Settings(BaseSettings):
         description="Neo4j password (required)",
     )
 
+    # Memory Extraction Configuration
+    extraction_model: str | None = Field(
+        None,
+        description="Model for memory extraction (defaults to haia_model if not set)",
+    )
+    extraction_min_confidence: float = Field(
+        0.4,
+        description="Minimum confidence threshold for extracted memories",
+        ge=0.0,
+        le=1.0,
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
