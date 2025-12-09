@@ -7,7 +7,7 @@
 
 This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Features are organized by phase, with dependencies clearly marked.
 
-**Current Status**: Phase 1 MVP + Memory System Complete - OpenAI-compatible API with streaming, conversation boundary detection, Neo4j memory infrastructure, automatic memory extraction, and embedding-based memory retrieval operational. HAIA now learns from conversations and uses memories to provide personalized responses. **Context optimization and homelab tool integration (Phase 2) is next.**
+**Current Status**: Phase 2 Memory System COMPLETE - OpenAI-compatible API with streaming, conversation boundary detection, Neo4j memory infrastructure, automatic memory extraction, embedding-based memory retrieval, AND context optimization all operational. HAIA now learns from conversations, retrieves relevant memories, deduplicates/re-ranks them, and stays within token budgets. **Phase 3 (homelab tool integration) is next.**
 
 ## Roadmap Phases
 
@@ -221,9 +221,9 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
-### Phase 2: Memory System Completion [In Progress]
+### Phase 2: Memory System Completion [COMPLETE]
 
-#### ✅ [P2] Context Optimization [COMPLETE - Session 9]
+#### ✅ [P2] Context Optimization [Session 9]
 
 **Description**: Optimize memory context injection with memory deduplication, relevance re-ranking, and token budget management.
 
@@ -477,7 +477,7 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 ### ✅ Memory Retrieval System (Session 8)
 
 **Completed**: 2025-12-09
-**PR**: TBD
+**PR**: #9
 **Tests**: Unit + integration tested
 
 **Description**: Embedding-based semantic memory retrieval with multi-factor relevance scoring. Uses Ollama embeddings and Neo4j vector index for semantic search, injecting relevant memories into conversation context for personalized responses.
@@ -515,6 +515,58 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
+### ✅ Context Optimization (Session 9)
+
+**Completed**: 2025-12-09
+**PR**: #10
+**Tests**: 43 tests passing (25 unit + 18 integration)
+
+**Description**: Memory context optimization with deduplication, multi-factor re-ranking, token budget management, and access pattern tracking.
+
+**Implementation**:
+- **Deduplicator** (`src/haia/context/deduplicator.py`):
+  - Removes exact duplicates (same content)
+  - Detects semantic similarity via cosine similarity (≥0.92 threshold)
+  - Handles correction superseding (corrections override original memories)
+  - Returns DeduplicationResult with detailed statistics
+- **Ranker** (`src/haia/context/ranker.py`):
+  - Multi-factor scoring: 40% similarity + 25% confidence + 20% recency + 15% frequency
+  - Exponential recency decay (half-life: 43.3 days ≈ 6 weeks)
+  - Logarithmic frequency scaling (diminishing returns for high access counts)
+  - Customizable weights via ScoreWeights model
+- **BudgetManager** (`src/haia/context/budget_manager.py`):
+  - Token counting with tiktoken (cl100k_base encoding)
+  - HARD_CUTOFF strategy: Remove memories exceeding budget
+  - TRUNCATE strategy: Shorten content proportionally to relevance
+  - Default: 2000 tokens with 50-token safety buffer
+- **AccessTracker** (`src/haia/context/access_tracker.py`):
+  - Neo4j-based access pattern tracking (last_accessed, access_count)
+  - Fire-and-forget async updates (non-blocking)
+  - Supports frequency-based re-ranking
+
+**Key Achievements**:
+- ✅ 80%+ duplicate reduction in typical scenarios
+- ✅ Multi-factor relevance scoring improves memory selection
+- ✅ Token budget enforcement prevents context overflow
+- ✅ Access pattern tracking enables frequency-based ranking
+- ✅ All features integrated into RetrievalService with opt-in flags
+- ✅ Graceful degradation when features unavailable
+- ✅ Comprehensive test coverage (43 tests)
+
+**Configuration**:
+- `DEDUP_SIMILARITY_THRESHOLD`: Cosine similarity for duplicate detection (default: 0.92)
+- `RANKER_SIMILARITY_WEIGHT`: Similarity weight in composite score (default: 0.40)
+- `RANKER_CONFIDENCE_WEIGHT`: Confidence weight (default: 0.25)
+- `RANKER_RECENCY_WEIGHT`: Recency weight (default: 0.20)
+- `RANKER_FREQUENCY_WEIGHT`: Frequency weight (default: 0.15)
+- `TOKEN_BUDGET_DEFAULT`: Default token budget (default: 2000)
+- `TOKEN_BUDGET_BUFFER`: Safety buffer for overhead (default: 50)
+- Integration flags: `enable_dedup`, `enable_rerank`, `track_access` (all default: True)
+
+**Note**: Phase 2 Memory System now COMPLETE. HAIA has full learning and optimization capabilities.
+
+---
+
 ## Future Considerations & Research Notes
 
 ### Smart Knowledge Graph Enhancement (Post-Phase 2)
@@ -532,6 +584,26 @@ Future enhancement could include:
 ---
 
 ## Changelog
+
+- **2025-12-09**: ✅ **Completed Context Optimization (Session 9)** - Phase 2 Memory System COMPLETE
+  - ✅ Context Optimization (Session 9): 43 tests passing, PR #10 merged
+    - Deduplicator: Removes exact duplicates, semantic similarity (≥0.92), correction superseding
+    - Ranker: Multi-factor scoring (40% similarity + 25% confidence + 20% recency + 15% frequency)
+    - BudgetManager: Token counting with tiktoken, HARD_CUTOFF and TRUNCATE strategies
+    - AccessTracker: Neo4j-based access pattern tracking for frequency scoring
+  - **Phase 2 Complete**: Full memory system operational
+    - Learning: Extraction (Session 7) ✅
+    - Retrieval: Embedding-based search (Session 8) ✅
+    - Optimization: Dedup, re-ranking, budgeting (Session 9) ✅
+  - **User Stories Completed**:
+    - US1: Memory deduplication (exact + semantic similarity + superseding)
+    - US2: Advanced relevance re-ranking with access patterns
+    - US3: Token budget management with multiple strategies
+  - All features integrated into RetrievalService with opt-in configuration flags
+  - Graceful degradation when features unavailable
+  - Comprehensive test coverage (25 unit + 18 integration tests)
+  - Version management fixed: Version now read from pyproject.toml (1.0.0+session9)
+  - Deployed to production: haia@blaireau with health endpoint reporting correct version
 
 - **2025-12-09**: ✅ **Completed Memory Retrieval System (Session 8)**
   - ✅ Memory Retrieval System (Session 8): Embedding-based semantic search operational
