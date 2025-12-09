@@ -9,6 +9,11 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
+from haia.context.access_tracker import AccessTracker
+from haia.context.budget_manager import BudgetManager
+from haia.context.deduplicator import Deduplicator
+from haia.context.models import DeduplicationResult, TruncationStrategy
+from haia.context.ranker import Ranker
 from haia.embedding.models import (
     RetrievalQuery,
     RetrievalResponse,
@@ -41,6 +46,7 @@ class RetrievalService:
         recency_weight: float = 0.2,
         type_weights: dict[str, float] | None = None,
         recency_decay_days: float = 43.3,
+        dedup_similarity_threshold: float = 0.92,
     ):
         """Initialize retrieval service.
 
@@ -52,6 +58,7 @@ class RetrievalService:
             recency_weight: Weight for recency score (γ) - default 0.2 (20%)
             type_weights: Weight multipliers by memory type (δ) - defaults to 1.0 for all
             recency_decay_days: Days for recency to decay to ~0.5 (default 43.3)
+            dedup_similarity_threshold: Cosine similarity threshold for deduplication (default 0.92)
         """
         self.neo4j = neo4j_service
         self.ollama = ollama_client
@@ -59,6 +66,7 @@ class RetrievalService:
         self.confidence_weight = confidence_weight
         self.recency_weight = recency_weight
         self.recency_decay_days = recency_decay_days
+        self.dedup_similarity_threshold = dedup_similarity_threshold
 
         # Default type weights (1.0 = neutral)
         self.type_weights = type_weights or {
@@ -69,16 +77,36 @@ class RetrievalService:
             "correction": 1.3,
         }
 
+        # Initialize context optimization components (Session 9)
+        self.deduplicator = Deduplicator()
+        self.ranker = Ranker()  # Uses default weights (40/25/20/15)
+        self.access_tracker = AccessTracker(neo4j_service)
+        self.budget_manager = BudgetManager()  # Default 2000 token budget
+
         logger.info(
             f"RetrievalService initialized (α={similarity_weight}, β={confidence_weight}, "
-            f"γ={recency_weight}, type_weights={self.type_weights})"
+            f"γ={recency_weight}, dedup_threshold={dedup_similarity_threshold}, "
+            f"type_weights={self.type_weights})"
         )
 
-    async def retrieve(self, query: RetrievalQuery) -> RetrievalResponse:
+    async def retrieve(
+        self,
+        query: RetrievalQuery,
+        enable_dedup: bool = True,
+        enable_rerank: bool = True,
+        track_access: bool = True,
+        token_budget: Optional[int] = None,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.HARD_CUTOFF,
+    ) -> RetrievalResponse:
         """Retrieve relevant memories for a query.
 
         Args:
             query: Retrieval query with text, filters, and thresholds
+            enable_dedup: Enable embedding-based deduplication (default: True)
+            enable_rerank: Enable multi-factor re-ranking (default: True)
+            track_access: Track memory access patterns (default: True)
+            token_budget: Optional token budget for cost control (None = no limit)
+            truncation_strategy: Strategy for budget enforcement (default: HARD_CUTOFF)
 
         Returns:
             Retrieval response with ranked results and metadata
@@ -115,8 +143,8 @@ class RetrievalService:
             f"Neo4j search returned {memories_searched} memories ({search_latency_ms:.1f}ms)"
         )
 
-        # Step 3: Convert to ExtractedMemory objects and calculate relevance
-        results = []
+        # Step 3: Convert to RetrievalResult objects with relevance scoring
+        retrieval_results = []
         for mem_data in raw_memories:
             try:
                 memory = self._dict_to_memory(mem_data)
@@ -125,35 +153,112 @@ class RetrievalService:
                     memory=memory,
                     similarity=similarity_score,
                 )
-                results.append((memory, similarity_score, relevance_score))
+                retrieval_results.append(
+                    RetrievalResult(
+                        memory=memory,
+                        similarity_score=similarity_score,
+                        relevance_score=relevance_score,
+                        rank=1,  # Temporary placeholder, will be properly assigned after ranking
+                    )
+                )
             except Exception as e:
                 logger.warning(f"Failed to process memory {mem_data.get('memory_id')}: {e}")
                 continue
 
-        # Step 4: Deduplicate near-identical memories
-        dedup_start = time.time()
-        deduplicated_results, dedup_count = self._deduplicate_memories(results)
-        logger.debug(f"Deduplication removed {dedup_count} near-duplicates")
-
-        # Step 5: Rank by relevance score
-        ranked_results = self._rank_memories(deduplicated_results)
-
-        # Step 6: Limit to top_k
-        final_results = ranked_results[: query.top_k]
-
-        # Step 7: Create RetrievalResult objects
-        retrieval_results = []
-        for rank, (memory, similarity, relevance) in enumerate(final_results, start=1):
-            retrieval_results.append(
-                RetrievalResult(
-                    memory=memory,
-                    similarity_score=similarity,
-                    relevance_score=relevance,
-                    rank=rank,
+        # Step 4: Deduplicate using embedding-based similarity (Session 9)
+        dedup_result: DeduplicationResult | None = None
+        if enable_dedup and len(retrieval_results) > 0:
+            dedup_start = time.time()
+            try:
+                dedup_result = await self.deduplicator.deduplicate(
+                    memories=retrieval_results,
+                    similarity_threshold=self.dedup_similarity_threshold,
                 )
-            )
+                retrieval_results = dedup_result.unique_memories
+                dedup_latency_ms = (time.time() - dedup_start) * 1000
+                logger.debug(
+                    f"Deduplication removed {dedup_result.total_removed} memories "
+                    f"({dedup_latency_ms:.1f}ms): "
+                    f"{dedup_result.duplicate_count} exact, "
+                    f"{dedup_result.similar_count} similar, "
+                    f"{dedup_result.superseded_count} superseded"
+                )
+            except Exception as e:
+                logger.warning(f"Deduplication failed, continuing without: {e}")
+                dedup_result = None
+
+        # Step 5: Fetch access metadata for re-ranking (Session 9)
+        if enable_rerank and len(retrieval_results) > 0:
+            try:
+                memory_ids = [r.memory.memory_id for r in retrieval_results]
+                access_metadata_dict = await self.access_tracker.get_access_metadata(memory_ids)
+
+                # Attach access metadata to results
+                for result in retrieval_results:
+                    result.access_metadata = access_metadata_dict.get(result.memory.memory_id)
+
+                logger.debug(f"Fetched access metadata for {len(memory_ids)} memories")
+            except Exception as e:
+                logger.warning(f"Failed to fetch access metadata: {e}")
+
+        # Step 6: Re-rank using multi-factor scoring (Session 9)
+        if enable_rerank and len(retrieval_results) > 0:
+            rerank_start = time.time()
+            try:
+                retrieval_results = self.ranker.rerank(retrieval_results)
+                rerank_latency_ms = (time.time() - rerank_start) * 1000
+                logger.debug(f"Re-ranked {len(retrieval_results)} memories ({rerank_latency_ms:.1f}ms)")
+            except Exception as e:
+                logger.warning(f"Re-ranking failed, using original order: {e}")
+                # Fallback to simple relevance sorting
+                retrieval_results.sort(key=lambda r: r.relevance_score, reverse=True)
+                for rank, result in enumerate(retrieval_results, start=1):
+                    result.rank = rank
+        else:
+            # Step 6b: Simple sort by relevance score if re-ranking disabled
+            retrieval_results.sort(key=lambda r: r.relevance_score, reverse=True)
+            for rank, result in enumerate(retrieval_results, start=1):
+                result.rank = rank
+
+        # Step 7: Apply token budget (Session 9)
+        if token_budget is not None and len(retrieval_results) > 0:
+            budget_start = time.time()
+            try:
+                retrieval_results = self.budget_manager.apply_budget(
+                    memories=retrieval_results,
+                    token_budget=token_budget,
+                    strategy=truncation_strategy,
+                )
+                budget_latency_ms = (time.time() - budget_start) * 1000
+                logger.debug(
+                    f"Applied token budget ({token_budget} tokens, {truncation_strategy}): "
+                    f"{len(retrieval_results)} memories kept ({budget_latency_ms:.1f}ms)"
+                )
+            except Exception as e:
+                logger.warning(f"Token budget enforcement failed: {e}")
+
+        # Step 8: Limit to top_k
+        retrieval_results = retrieval_results[: query.top_k]
+
+        # Step 9: Track memory access (Session 9)
+        if track_access and len(retrieval_results) > 0:
+            try:
+                memory_ids = [r.memory.memory_id for r in retrieval_results]
+                await self.access_tracker.record_access(memory_ids)
+                logger.debug(f"Tracked access for {len(memory_ids)} memories")
+            except Exception as e:
+                logger.warning(f"Failed to track access: {e}")
+
+        # Step 9: Mark deduplication flag
+        for result in retrieval_results:
+            if dedup_result is not None:
+                result.was_deduplicated = True
 
         total_latency_ms = (time.time() - start_time) * 1000
+
+        # Calculate memories_matched (before dedup)
+        memories_matched = memories_searched  # All searched memories matched initially
+        memories_deduplicated = dedup_result.total_removed if dedup_result else 0
 
         response = RetrievalResponse(
             query=query.query_text,
@@ -166,8 +271,9 @@ class RetrievalService:
             min_similarity=query.min_similarity,
             min_confidence=query.min_confidence,
             memories_searched=memories_searched,
-            memories_matched=len(ranked_results),
-            memories_deduplicated=dedup_count,
+            memories_matched=memories_matched,
+            memories_deduplicated=memories_deduplicated,
+            dedup_stats=dedup_result,  # Add dedup_stats for Session 9
         )
 
         top_relevance = retrieval_results[0].relevance_score if retrieval_results else 0.0
@@ -234,7 +340,8 @@ class RetrievalService:
         # Apply type weight multiplier
         final_score = base_score * type_weight
 
-        return max(0.0, final_score)  # Clamp to non-negative
+        # Clamp to valid range [0.0, 1.0] to match RetrievalResult constraints
+        return max(0.0, min(1.0, final_score))
 
     def _calculate_recency_score(self, extraction_timestamp: datetime | None) -> float:
         """Calculate recency score using exponential decay.
@@ -395,6 +502,14 @@ class RetrievalService:
         metadata = data.get("metadata")
         if metadata is None:
             metadata = {}
+        elif isinstance(metadata, str):
+            # Parse JSON-encoded metadata from Neo4j
+            import json
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse metadata JSON: {metadata}")
+                metadata = {}
 
         return ExtractedMemory(
             memory_id=data["memory_id"],
@@ -405,7 +520,8 @@ class RetrievalService:
             extraction_timestamp=extraction_ts,
             category=data.get("category"),
             metadata=metadata,
-            has_embedding=True,  # If it's in results, it has an embedding
+            embedding=data.get("embedding"),  # Include embedding vector
+            has_embedding=data.get("has_embedding", True),  # Use from data or default True
             embedding_version=data.get("embedding_version"),
             embedding_updated_at=embedding_updated,
         )

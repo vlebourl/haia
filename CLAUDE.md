@@ -237,6 +237,8 @@ All configuration managed through `pydantic-settings` with environment variables
 - N/A (extraction service only - does not persist data, outputs JSON) (007-memory-extraction)
 - Python 3.11+ (existing project standard) + PydanticAI 1.25.1+, httpx (Ollama client), neo4j (async driver with vector support) (008-memory-retrieval)
 - Neo4j 5.11+ with vector index support (existing from Session 6-7) (008-memory-retrieval)
+- Python 3.11+ (existing project standard) + PydanticAI 1.25.1+, httpx (async HTTP), neo4j (async driver), tiktoken (token counting) (009-context-optimization)
+- Neo4j 5.15+ graph database with vector index (existing from Session 6-8) (009-context-optimization)
 
 ### Memory System (006-docker-neo4j-stack)
 - **Neo4j 5.15 Graph Database** with async Python driver (`neo4j` package)
@@ -264,10 +266,43 @@ All configuration managed through `pydantic-settings` with environment variables
   - HAIA runs natively for hot-reload (`uv run uvicorn`)
   - Use `docker compose -f deployment/docker-compose.dev.yml up neo4j`
 
+### Context Optimization (009-context-optimization)
+- **Deduplicator** (`src/haia/context/deduplicator.py`)
+  - Removes exact duplicates (same memory_id)
+  - Detects similar memories via cosine similarity (default threshold: 0.92)
+  - Handles superseded corrections (corrections override original memories)
+  - Returns DeduplicationResult with stats (duplicate_count, similar_count, superseded_count)
+
+- **Ranker** (`src/haia/context/ranker.py`)
+  - Multi-factor relevance scoring: 40% similarity + 25% confidence + 20% recency + 15% frequency
+  - Exponential recency decay (half-life: 43.3 days ≈ 6 weeks)
+  - Logarithmic frequency scaling (diminishing returns for high access counts)
+  - Customizable weights via ScoreWeights model
+
+- **BudgetManager** (`src/haia/context/budget_manager.py`)
+  - Token counting with tiktoken (cl100k_base encoding for GPT-4/Claude)
+  - HARD_CUTOFF strategy: Remove memories that don't fit budget
+  - TRUNCATE strategy: Shorten content proportionally to relevance
+  - Default budget: 2000 tokens with 50-token buffer for overhead
+
+- **AccessTracker** (`src/haia/context/access_tracker.py`)
+  - Records memory access timestamps and frequency in Neo4j
+  - Supports frequency-based re-ranking
+  - Non-blocking: Failures don't break retrieval
+  - Methods: record_access(), get_access_metadata(), get_usage_stats()
+
+- **Integration**: All features integrated into RetrievalService with opt-in flags
+  - enable_dedup=True (default)
+  - enable_rerank=True (default)
+  - track_access=True (default)
+  - token_budget=None (optional, disabled by default)
+
 ### Previous Features
 - N/A (stateless client, no persistence in this layer) (001-llm-abstraction)
 - Stateless API design - client manages conversation history (003-openai-chat-api)
 - Versatile companion system prompt - homelab as one capability among many (004-system-prompt-redesign)
 
 ## Recent Changes
-- 001-llm-abstraction: Added Python 3.11+
+- 009-context-optimization: Added Deduplicator, Ranker, BudgetManager, AccessTracker (Session 9)
+- 008-memory-retrieval: Added RetrievalService with semantic search (Session 8)
+- 007-memory-extraction: Added memory extraction pipeline (Session 7)

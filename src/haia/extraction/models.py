@@ -111,6 +111,14 @@ class ExtractedMemory(BaseModel):
         None, description="When embedding was last generated/updated"
     )
 
+    # Access tracking fields (Session 9 - Context Optimization)
+    last_accessed: datetime | None = Field(
+        None, description="Timestamp of most recent access (UTC)"
+    )
+    access_count: int = Field(
+        default=0, ge=0, description="Total number of times accessed"
+    )
+
     @field_validator("confidence")
     @classmethod
     def validate_confidence_threshold(cls, v: float) -> float:
