@@ -10,6 +10,26 @@ Components:
 - retrieval_service.py: Semantic search and relevance scoring service
 """
 
+from haia.embedding.models import (
+    BackfillProgress,
+    EmbeddingError,
+    EmbeddingException,
+    EmbeddingRequest,
+    EmbeddingResponse,
+    RelevanceScore,
+    RetrievalQuery,
+    RetrievalResponse,
+    RetrievalResult,
+)
+
+# Rebuild models to resolve forward references after all imports
+try:
+    from haia.context.models import DeduplicationResult  # noqa: F401
+
+    RetrievalResponse.model_rebuild()
+except ImportError:
+    pass  # DeduplicationResult not yet available, will rebuild later
+
 __all__ = [
     "EmbeddingRequest",
     "EmbeddingResponse",

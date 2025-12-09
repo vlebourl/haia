@@ -645,6 +645,8 @@ class Neo4jService:
           memory.extraction_timestamp AS extraction_timestamp,
           memory.category AS category,
           memory.metadata AS metadata,
+          memory.embedding AS embedding,
+          memory.has_embedding AS has_embedding,
           memory.embedding_version AS embedding_version,
           memory.embedding_updated_at AS embedding_updated_at,
           score AS similarity_score
@@ -752,3 +754,209 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Failed to query memories without embeddings: {e}")
             return []
+
+    # ========================================================================
+    # Access Tracking Methods (Session 9 - Context Optimization)
+    # ========================================================================
+
+    async def record_memory_access(
+        self,
+        memory_ids: list[str],
+        access_time: Any,
+    ) -> int:
+        """Record access to memories for usage tracking.
+
+        Updates last_accessed and increments access_count for all specified memories.
+        Creates access tracking properties if they don't exist.
+
+        Args:
+            memory_ids: List of memory IDs to track
+            access_time: Timestamp of access (datetime)
+
+        Returns:
+            Number of memories successfully updated
+        """
+        if not self.driver:
+            raise RuntimeError("Not connected to Neo4j")
+
+        # Convert datetime to ISO string for Neo4j
+        access_time_str = access_time.isoformat()
+
+        query = """
+        UNWIND $memory_ids AS memory_id
+        MATCH (m) WHERE m.memory_id = memory_id
+        SET m.last_accessed = datetime($access_time),
+            m.access_count = coalesce(m.access_count, 0) + 1
+        RETURN count(m) as updated_count
+        """
+
+        try:
+            async with self.driver.session() as session:
+                result = await session.run(
+                    query,
+                    memory_ids=memory_ids,
+                    access_time=access_time_str,
+                )
+                record = await result.single()
+                updated_count = record["updated_count"] if record else 0
+
+                logger.debug(
+                    f"Recorded access for {updated_count} memories at {access_time_str}"
+                )
+
+                return updated_count
+
+        except Exception as e:
+            logger.error(f"Failed to record memory access: {e}", exc_info=True)
+            return 0
+
+    async def get_access_metadata(self, memory_ids: list[str]) -> dict:
+        """Get access metadata for multiple memories.
+
+        Args:
+            memory_ids: List of memory IDs to get metadata for
+
+        Returns:
+            Dictionary mapping memory_id -> AccessMetadata dict
+        """
+        if not self.driver:
+            raise RuntimeError("Not connected to Neo4j")
+
+        from haia.context.models import AccessMetadata
+
+        query = """
+        UNWIND $memory_ids AS memory_id
+        MATCH (m) WHERE m.memory_id = memory_id
+        RETURN m.memory_id as memory_id,
+               m.last_accessed as last_accessed,
+               coalesce(m.access_count, 0) as access_count
+        """
+
+        try:
+            async with self.driver.session() as session:
+                result = await session.run(query, memory_ids=memory_ids)
+                records = [record.data() async for record in result]
+
+                # Convert to AccessMetadata objects
+                metadata_dict = {}
+                for record in records:
+                    # Convert Neo4j DateTime to Python datetime
+                    last_accessed = record.get("last_accessed")
+                    if last_accessed is not None and hasattr(last_accessed, "to_native"):
+                        last_accessed = last_accessed.to_native()
+
+                    metadata_dict[record["memory_id"]] = AccessMetadata(
+                        memory_id=record["memory_id"],
+                        last_accessed=last_accessed,
+                        access_count=record.get("access_count", 0),
+                    )
+
+                # Fill in missing memories with default metadata
+                for memory_id in memory_ids:
+                    if memory_id not in metadata_dict:
+                        metadata_dict[memory_id] = AccessMetadata(
+                            memory_id=memory_id,
+                            last_accessed=None,
+                            access_count=0,
+                        )
+
+                return metadata_dict
+
+        except Exception as e:
+            logger.error(f"Failed to get access metadata: {e}", exc_info=True)
+            # Return default metadata on error
+            return {
+                memory_id: AccessMetadata(
+                    memory_id=memory_id,
+                    last_accessed=None,
+                    access_count=0,
+                )
+                for memory_id in memory_ids
+            }
+
+    async def get_memory_usage_stats(self, memory_id: str) -> dict:
+        """Get detailed usage statistics for a memory.
+
+        Args:
+            memory_id: Memory ID to get stats for
+
+        Returns:
+            Dictionary with usage statistics
+        """
+        if not self.driver:
+            raise RuntimeError("Not connected to Neo4j")
+
+        query = """
+        MATCH (m) WHERE m.memory_id = $memory_id
+        RETURN m.access_count as total_accesses,
+               m.last_accessed as last_accessed,
+               m.created_at as first_accessed
+        """
+
+        try:
+            async with self.driver.session() as session:
+                result = await session.run(query, memory_id=memory_id)
+                record = await result.single()
+
+                if not record:
+                    return {
+                        "total_accesses": 0,
+                        "last_accessed": None,
+                        "first_accessed": None,
+                        "days_since_last_access": None,
+                    }
+
+                stats = {
+                    "total_accesses": record.get("total_accesses", 0),
+                    "last_accessed": record.get("last_accessed"),
+                    "first_accessed": record.get("first_accessed"),
+                    "days_since_last_access": None,
+                }
+
+                return stats
+
+        except Exception as e:
+            logger.error(
+                f"Failed to get usage stats for {memory_id}: {e}",
+                exc_info=True,
+            )
+            return {
+                "total_accesses": 0,
+                "last_accessed": None,
+                "first_accessed": None,
+                "days_since_last_access": None,
+            }
+
+    async def reset_access_metadata(self, memory_ids: list[str]) -> int:
+        """Reset access tracking for specified memories.
+
+        Args:
+            memory_ids: List of memory IDs to reset
+
+        Returns:
+            Number of memories reset
+        """
+        if not self.driver:
+            raise RuntimeError("Not connected to Neo4j")
+
+        query = """
+        UNWIND $memory_ids AS memory_id
+        MATCH (m) WHERE m.memory_id = memory_id
+        SET m.access_count = 0,
+            m.last_accessed = NULL
+        RETURN count(m) as reset_count
+        """
+
+        try:
+            async with self.driver.session() as session:
+                result = await session.run(query, memory_ids=memory_ids)
+                record = await result.single()
+                reset_count = record["reset_count"] if record else 0
+
+                logger.debug(f"Reset access metadata for {reset_count} memories")
+
+                return reset_count
+
+        except Exception as e:
+            logger.error(f"Failed to reset access metadata: {e}", exc_info=True)
+            return 0

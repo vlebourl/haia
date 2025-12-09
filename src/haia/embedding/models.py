@@ -8,12 +8,17 @@ This module defines all data structures used for:
 - Error handling
 """
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
 from haia.extraction.models import ExtractedMemory
+
+if TYPE_CHECKING:
+    from haia.context.models import DeduplicationResult
 
 
 # ============================================================================
@@ -197,6 +202,21 @@ class RetrievalResult(BaseModel):
     retrieved_at: datetime = Field(default_factory=datetime.utcnow)
     query_latency_ms: float | None = None
 
+    # Context optimization metadata (Session 9)
+    token_count: int | None = Field(
+        None, ge=0, description="Estimated token count for this memory"
+    )
+    was_deduplicated: bool = Field(
+        default=False, description="True if duplicates were removed from this result set"
+    )
+    budget_enforced: bool = Field(
+        default=False, description="True if token budget limited results"
+    )
+    # Use Any temporarily to avoid circular import - will be AccessMetadata at runtime
+    access_metadata: "Any" = Field(
+        None, description="Access pattern metadata for re-ranking"
+    )
+
     @property
     def is_high_confidence(self) -> bool:
         """Check if memory is high confidence (≥0.7)."""
@@ -249,6 +269,11 @@ class RetrievalResponse(BaseModel):
     memories_searched: int
     memories_matched: int
     memories_deduplicated: int = 0
+
+    # Context optimization (Session 9)
+    dedup_stats: "DeduplicationResult | None" = Field(
+        None, description="Detailed deduplication statistics"
+    )
 
     @property
     def has_results(self) -> bool:

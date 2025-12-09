@@ -1,7 +1,16 @@
 """Configuration management using pydantic-settings."""
 
+from enum import Enum
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class TruncationStrategy(str, Enum):
+    """Strategy for handling token budget overflow."""
+
+    HARD_CUTOFF = "hard_cutoff"  # Stop including memories when budget reached
+    TRUNCATE = "truncate"  # Truncate individual memories to fit budget
 
 
 class Settings(BaseSettings):
@@ -175,5 +184,88 @@ class Settings(BaseSettings):
         return v
 
 
-# Global settings instance
+class ContextOptimizationConfig(BaseSettings):
+    """Configuration for context optimization features (Session 9).
+
+    Includes settings for:
+    - Memory deduplication (P1)
+    - Advanced relevance re-ranking (P2)
+    - Token budget management (P3)
+    - Access pattern tracking
+    """
+
+    # Deduplication (P1)
+    dedup_enabled: bool = Field(
+        default=True, description="Enable memory deduplication"
+    )
+    dedup_similarity_threshold: float = Field(
+        default=0.92,
+        ge=0.0,
+        le=1.0,
+        description="Cosine similarity threshold for duplicates (0.90-0.95 recommended)",
+    )
+
+    # Re-ranking (P2)
+    reranking_enabled: bool = Field(
+        default=True, description="Enable advanced re-ranking"
+    )
+    recency_decay_days: float = Field(
+        default=30.0,
+        gt=0.0,
+        description="Half-life for recency decay (days)",
+    )
+    similarity_weight: float = Field(
+        default=0.40,
+        ge=0.0,
+        le=1.0,
+        description="Weight for similarity score in re-ranking",
+    )
+    confidence_weight: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description="Weight for confidence score in re-ranking",
+    )
+    recency_weight: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description="Weight for recency score in re-ranking",
+    )
+    frequency_weight: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Weight for frequency score in re-ranking",
+    )
+
+    # Token budget (P3)
+    token_budget_enabled: bool = Field(
+        default=False, description="Enable token budgeting"
+    )
+    memory_token_budget: int | None = Field(
+        default=None,
+        gt=0,
+        description="Max tokens for memory context (None = unlimited)",
+    )
+    token_budget_strategy: TruncationStrategy = Field(
+        default=TruncationStrategy.HARD_CUTOFF,
+        description="Strategy for handling budget overflow",
+    )
+
+    # Access tracking
+    access_tracking_enabled: bool = Field(
+        default=True, description="Track memory access patterns"
+    )
+    access_tracking_async: bool = Field(
+        default=True, description="Async background access tracking"
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="CONTEXT_OPT_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
+# Global settings instances
 settings = Settings()
+context_optimization_config = ContextOptimizationConfig()
