@@ -221,7 +221,7 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
-### Phase 2: Core Features [In Progress]
+### Phase 2: Memory System Completion [In Progress]
 
 #### [P2] Context Optimization [Next - Session 9]
 
@@ -244,7 +244,9 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
-#### [P2] Basic Proxmox Integration
+### Phase 3: Tool Integration & Extensibility [Future]
+
+#### [P3] Basic Proxmox Integration
 
 **Description**: Custom PydanticAI tools for querying Proxmox VE cluster status, VM/container listings, and resource metrics.
 
@@ -270,11 +272,11 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 **Effort Estimate**: M - API client setup, multiple tools, error handling
 
-**Priority**: P2 - Demonstrates homelab integration, high user interest
+**Priority**: P3 - Demonstrates homelab integration, deferred until memory system complete
 
 ---
 
-#### [P2] MCP Server Integration Framework
+#### [P3] MCP Server Integration Framework
 
 **Description**: Load and integrate MCP servers from `mcp_config.json` into the PydanticAI agent as toolsets.
 
@@ -301,13 +303,13 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 **Effort Estimate**: M - MCP configuration parsing, multi-transport support, error handling for server failures
 
-**Priority**: P2 - Demonstrates extensibility, enables community tools
+**Priority**: P3 - Demonstrates extensibility, deferred until memory system complete
 
 ---
 
-### Phase 3: Advanced Features [Future]
+### Phase 4: Proactive Monitoring & Automation [Future]
 
-#### [P3] Background Scheduler for Proactive Monitoring
+#### [P4] Background Scheduler for Proactive Monitoring
 
 **Description**: APScheduler-based background tasks for periodic infrastructure checks and proactive alerting.
 
@@ -322,8 +324,8 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 **Dependencies**:
 - ✅ PydanticAI Agent Setup (Phase 0)
-- ⏳ Basic Proxmox Integration - Phase 2
-- ⏳ Notification Backends - Phase 3
+- ⏳ Basic Proxmox Integration - Phase 3
+- ⏳ Notification Backends - Phase 4
 - 📦 `apscheduler` library
 
 **Constitution Compliance**:
@@ -332,11 +334,11 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 **Effort Estimate**: M - Scheduler setup, job definitions, notification integration
 
-**Priority**: P3 - Advanced automation, not required for initial usefulness
+**Priority**: P4 - Advanced automation, not required for initial usefulness
 
 ---
 
-#### [P3] Notification Backends (Telegram, Discord)
+#### [P4] Notification Backends (Telegram, Discord)
 
 **Description**: Abstract notification system with Telegram and Discord implementations for alerts.
 
@@ -360,11 +362,11 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 **Effort Estimate**: S - Simple API integrations with async HTTP
 
-**Priority**: P3 - Nice-to-have for proactive alerting
+**Priority**: P4 - Nice-to-have for proactive alerting
 
 ---
 
-### Phase 4: Future Considerations
+### Phase 5: Future Considerations
 
 - Home Assistant integration tools
 - Alertmanager/Prometheus metrics querying
