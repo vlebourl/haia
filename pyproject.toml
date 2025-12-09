@@ -1,6 +1,6 @@
 [project]
 name = "haia"
-version = "0.1.0"
+version = "1.0.0+session9"
 description = "Homelab AI Assistant - AI-powered infrastructure management"
 readme = "README.md"
 requires-python = ">=3.11"

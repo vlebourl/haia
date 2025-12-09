@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import uuid
+from importlib.metadata import version as get_version
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -443,7 +444,7 @@ async def health_check(
 
     return {
         "status": overall_status,
-        "version": "1.0.0-session9",
+        "version": get_version("haia"),  # Read from pyproject.toml
         "features": {
             "memory_extraction": "enabled",  # Session 7
             "memory_retrieval": retrieval_status,  # Session 8
