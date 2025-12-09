@@ -443,11 +443,12 @@ async def health_check(
 
     return {
         "status": overall_status,
-        "version": "1.0.0-session8",
+        "version": "1.0.0-session9",
         "features": {
             "memory_extraction": "enabled",  # Session 7
             "memory_retrieval": retrieval_status,  # Session 8
             "multi_factor_scoring": retrieval_status,  # Session 8 US3
+            "context_optimization": "enabled",  # Session 9
         },
         "services": {
             "neo4j": "connected" if neo4j_healthy else "disconnected",
