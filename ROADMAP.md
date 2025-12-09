@@ -504,6 +504,22 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
+## Future Considerations & Research Notes
+
+### Smart Knowledge Graph Enhancement (Post-Phase 2)
+
+**Note**: Current implementation (Sessions 7-8) uses flat Memory nodes with vector search only. The rich graph schema (Person, Interest, Infrastructure, TechPreference nodes with relationships) exists but isn't being populated automatically.
+
+Future enhancement could include:
+- LLM-based entity extraction from memory content
+- Automatic graph construction with relationships
+- Hybrid retrieval combining vector search + graph traversal
+- Entity resolution and relationship inference
+
+**Status**: Research topic for future brainstorming session after Phase 2 completion. Focus on planned sessions first.
+
+---
+
 ## Changelog
 
 - **2025-12-09**: ✅ **Completed Memory Retrieval System (Session 8)**
