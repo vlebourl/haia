@@ -1,13 +1,13 @@
 # HAIA Development Roadmap
 
-**Last Updated**: 2025-12-08
-**Version**: 0.2.0
+**Last Updated**: 2025-12-09
+**Version**: 0.3.0
 
 ## Overview
 
 This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Features are organized by phase, with dependencies clearly marked.
 
-**Current Status**: Phase 1 MVP Complete - OpenAI-compatible API with streaming, conversation boundary detection, Neo4j memory infrastructure, and automatic memory extraction operational. **Memory retrieval and usage in conversations (Phase 2) is next.**
+**Current Status**: Phase 1 MVP + Memory System Complete - OpenAI-compatible API with streaming, conversation boundary detection, Neo4j memory infrastructure, automatic memory extraction, and embedding-based memory retrieval operational. HAIA now learns from conversations and uses memories to provide personalized responses. **Context optimization and homelab tool integration (Phase 2) is next.**
 
 ## Roadmap Phases
 
@@ -221,47 +221,26 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
-### Phase 2: Core Features [Planned]
+### Phase 2: Core Features [In Progress]
 
-#### [P2] Memory Retrieval System [Next - Session 8]
+#### [P2] Context Optimization [Next - Session 9]
 
-**Description**: Embedding-based semantic search for relevant memories. Query Neo4j using vector similarity to find contextually relevant memories for ongoing conversations.
+**Description**: Optimize memory context injection with memory deduplication, relevance re-ranking, and token budget management.
 
-**User Value**: HAIA can find and use relevant memories from past conversations, providing personalized responses based on learned preferences and context.
+**User Value**: HAIA uses memories more efficiently, avoiding redundant information and staying within context limits while providing relevant personalized responses.
 
 **Implementation Approach**:
-- OpenAI embeddings API for memory content vectorization
-- Neo4j vector index for similarity search
-- Memory retrieval service with relevance scoring
-- Top-K retrieval with configurable threshold
-- Located in: `src/haia/retrieval/`
+- Memory deduplication (similar content, overlapping information)
+- Advanced relevance re-ranking (recency, frequency, user feedback)
+- Token budget management for context window limits
+- Memory metadata enrichment (usage tracking, feedback signals)
+- Located in: `src/haia/context/`
 
 **Dependencies**:
 - ✅ Memory Extraction Engine (Session 7)
-- ✅ Neo4j Memory Infrastructure (Session 6)
-- 📦 OpenAI API for embeddings
+- ✅ Memory Retrieval System (Session 8)
 
-**Priority**: P2 - Required for memories to be useful
-
----
-
-#### [P2] Context Integration [Session 9]
-
-**Description**: Inject retrieved memories into conversation context, augmenting the agent's system prompt with relevant learned information.
-
-**User Value**: HAIA remembers your preferences and provides personalized responses. "Use Docker" → HAIA automatically suggests Docker-based solutions.
-
-**Implementation Approach**:
-- Memory injection in chat endpoint before agent execution
-- Dynamic system prompt augmentation with top memories
-- Memory source attribution in responses
-- Located in: `src/haia/api/routes/chat.py`, `src/haia/context/`
-
-**Dependencies**:
-- ✅ Memory Extraction Engine (Session 7)
-- ⏳ Memory Retrieval System (Session 8)
-
-**Priority**: P2 - Completes the memory learning loop
+**Priority**: P2 - Improves memory system efficiency
 
 ---
 
@@ -480,11 +459,71 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 - ✅ Comprehensive test coverage (61 tests)
 - ✅ Production-ready deployment (Docker Compose stack)
 
-**Note**: Memories are extracted and stored, but not yet retrieved or used in conversations. That's coming in Sessions 8-9 (Memory Retrieval and Context Integration).
+**Note**: Memories are extracted and stored. As of Session 8, memories are now retrieved and used in conversations!
+
+---
+
+### ✅ Memory Retrieval System (Session 8)
+
+**Completed**: 2025-12-09
+**PR**: TBD
+**Tests**: Unit + integration tested
+
+**Description**: Embedding-based semantic memory retrieval with multi-factor relevance scoring. Uses Ollama embeddings and Neo4j vector index for semantic search, injecting relevant memories into conversation context for personalized responses.
+
+**Implementation**:
+- **OllamaEmbeddingClient**: Async client for Ollama embedding generation (nomic-embed-text model)
+- **RetrievalService**: Orchestrates embedding generation, vector search, and relevance filtering
+- **Multi-Factor Relevance Scoring**: Combines vector similarity + confidence scores + recency
+- **Neo4j Vector Index**: HNSW index for 768-dimensional embeddings with cosine similarity
+- **Backfill Worker**: Automatic embedding generation for memories without embeddings (60s interval)
+- **Context Injection**: Retrieved memories formatted as natural language and injected into conversation
+- **Graceful Degradation**: System continues without memories if retrieval fails
+- Located in: `src/haia/embedding/`, `src/haia/api/routes/chat.py`
+
+**Key Features**:
+1. **User Story 1 - Core Retrieval**: Query-driven semantic search with vector similarity
+2. **User Story 2 - Embedding Generation**: Automatic embedding generation via backfill worker
+3. **User Story 3 - Relevance Filtering**: Multi-factor scoring (similarity + confidence + recency)
+
+**Key Achievements**:
+- ✅ Ollama embedding integration (nomic-embed-text, 768 dimensions)
+- ✅ Neo4j vector index with HNSW algorithm
+- ✅ Multi-factor relevance scoring (similarity, confidence, recency)
+- ✅ Automatic backfill worker for embedding generation
+- ✅ Natural language memory formatting for LLM context
+- ✅ Graceful degradation when retrieval unavailable
+- ✅ Health endpoint with retrieval service status
+- ✅ Comprehensive test coverage
+
+**Configuration**:
+- `EMBEDDING_MODEL`: Ollama embedding model (default: `ollama:nomic-embed-text`)
+- `EMBEDDING_DIM`: Embedding dimensions (default: 768)
+- `OLLAMA_BASE_URL`: Ollama API endpoint
+- Top-K retrieval: 5 memories, min_similarity: 0.65, min_confidence: 0.4
 
 ---
 
 ## Changelog
+
+- **2025-12-09**: ✅ **Completed Memory Retrieval System (Session 8)**
+  - ✅ Memory Retrieval System (Session 8): Embedding-based semantic search operational
+    - OllamaEmbeddingClient for nomic-embed-text embeddings (768 dimensions)
+    - Neo4j vector index with HNSW algorithm and cosine similarity
+    - Multi-factor relevance scoring (vector similarity + confidence + recency)
+    - Automatic backfill worker for embedding generation (60s interval)
+    - Natural language memory formatting for LLM context injection
+    - Graceful degradation when retrieval service unavailable
+    - Health endpoint now includes retrieval service status
+  - **User Stories Completed**:
+    - US1: Core query-driven semantic memory retrieval
+    - US2: Automatic embedding generation via backfill worker
+    - US3: Multi-factor relevance filtering with configurable thresholds
+  - **HAIA Now Learns AND Uses Memories**: Complete memory lifecycle implemented
+    - Extraction (Session 7) + Retrieval (Session 8) = Working memory system
+    - Memories automatically injected into conversations for personalized responses
+  - Configuration: EMBEDDING_MODEL, EMBEDDING_DIM, OLLAMA_BASE_URL environment variables
+  - Comprehensive unit and integration test coverage
 
 - **2025-12-08**: ✅ **Completed Memory Extraction Engine (Session 7)**
   - ✅ Memory Extraction Engine (Session 7): 61 tests passing, PR #8 merged

@@ -136,3 +136,91 @@ class MemoryStorageService:
                 "conversation_id": memory.source_conversation_id,
             },
         )
+
+    async def store_embedding(
+        self,
+        memory_id: str,
+        embedding: list[float],
+        embedding_version: str,
+    ) -> bool:
+        """Store embedding vector for an existing memory.
+
+        Updates an existing Memory node with its embedding vector and metadata.
+        This method is used for:
+        - Immediate embedding generation after memory extraction (Session 8)
+        - Backfilling embeddings for existing memories
+
+        Args:
+            memory_id: ID of the memory to update
+            embedding: 768-dimensional embedding vector
+            embedding_version: Model version used (e.g., 'nomic-embed-text-v1')
+
+        Returns:
+            True if embedding stored successfully, False if memory not found
+
+        Raises:
+            ValueError: If embedding dimensions are invalid
+            Exception: If Neo4j update fails
+
+        Example:
+            >>> await storage.store_embedding(
+            ...     memory_id="mem_123",
+            ...     embedding=[0.1, 0.2, ...],  # 768 dimensions
+            ...     embedding_version="nomic-embed-text-v1"
+            ... )
+            True
+        """
+        # Validate embedding dimensions
+        if not embedding:
+            raise ValueError("Embedding vector cannot be empty")
+
+        if len(embedding) != 768:
+            raise ValueError(
+                f"Embedding must be 768 dimensions, got {len(embedding)}"
+            )
+
+        # Cypher query to update memory with embedding
+        query = """
+        MATCH (m:Memory {id: $memory_id})
+        SET
+            m.embedding = $embedding,
+            m.has_embedding = $has_embedding,
+            m.embedding_version = $embedding_version,
+            m.embedding_updated_at = datetime()
+        RETURN m.id as memory_id
+        """
+
+        params = {
+            "memory_id": memory_id,
+            "embedding": embedding,
+            "has_embedding": True,
+            "embedding_version": embedding_version,
+        }
+
+        try:
+            async with self.neo4j.driver.session() as session:
+                result = await session.run(query, **params)
+                record = await result.single()
+
+                if record is None:
+                    logger.warning(
+                        f"Memory {memory_id} not found, cannot store embedding"
+                    )
+                    return False
+
+                logger.debug(
+                    f"Stored embedding for memory {memory_id}",
+                    extra={
+                        "embedding_version": embedding_version,
+                        "embedding_dimensions": len(embedding),
+                    },
+                )
+                return True
+
+        except Exception as e:
+            logger.error(
+                f"Failed to store embedding for memory {memory_id}: {e}",
+                exc_info=True,
+                extra={"embedding_version": embedding_version},
+            )
+            raise

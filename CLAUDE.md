@@ -235,6 +235,8 @@ All configuration managed through `pydantic-settings` with environment variables
 ## Active Technologies
 - Python 3.11+ + PydanticAI 1.25.1+, pydantic, httpx (for async operations) (007-memory-extraction)
 - N/A (extraction service only - does not persist data, outputs JSON) (007-memory-extraction)
+- Python 3.11+ (existing project standard) + PydanticAI 1.25.1+, httpx (Ollama client), neo4j (async driver with vector support) (008-memory-retrieval)
+- Neo4j 5.11+ with vector index support (existing from Session 6-7) (008-memory-retrieval)
 
 ### Memory System (006-docker-neo4j-stack)
 - **Neo4j 5.15 Graph Database** with async Python driver (`neo4j` package)
