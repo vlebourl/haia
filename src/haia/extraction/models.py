@@ -97,6 +97,20 @@ class ExtractedMemory(BaseModel):
         default_factory=dict, description="Additional context"
     )
 
+    # Embedding fields (Session 8 - Memory Retrieval)
+    embedding: list[float] | None = Field(
+        None, description="768-dimensional embedding vector for semantic search"
+    )
+    has_embedding: bool = Field(
+        False, description="True if embedding has been generated"
+    )
+    embedding_version: str | None = Field(
+        None, description="Embedding model version (e.g., 'nomic-embed-text-v1')"
+    )
+    embedding_updated_at: datetime | None = Field(
+        None, description="When embedding was last generated/updated"
+    )
+
     @field_validator("confidence")
     @classmethod
     def validate_confidence_threshold(cls, v: float) -> float:

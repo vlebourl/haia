@@ -550,3 +550,205 @@ class Neo4jService:
         return await self.create_relationship(
             "Interest", interest_id_1, "RELATED_TO", "Interest", interest_id_2, properties
         )
+
+    # ========================================================================
+    # Vector Index Operations (Session 8 - Memory Retrieval)
+    # ========================================================================
+
+    async def create_vector_index(
+        self,
+        index_name: str,
+        node_label: str,
+        property_name: str,
+        dimensions: int = 768,
+        similarity_function: str = "cosine",
+    ) -> bool:
+        """Create a vector index for semantic search.
+
+        Args:
+            index_name: Name of the index (e.g., 'memory_embeddings')
+            node_label: Node label to index (e.g., 'Memory')
+            property_name: Property containing embedding vector (e.g., 'embedding')
+            dimensions: Embedding vector dimensions (default: 768)
+            similarity_function: Similarity metric - 'cosine', 'euclidean' (default: 'cosine')
+
+        Returns:
+            True if index created successfully, False otherwise
+        """
+        if not self.driver:
+            logger.error("Cannot create vector index: Driver not initialized")
+            return False
+
+        query = f"""
+        CREATE VECTOR INDEX {index_name} IF NOT EXISTS
+        FOR (n:{node_label}) ON (n.{property_name})
+        OPTIONS {{indexConfig: {{
+            `vector.dimensions`: {dimensions},
+            `vector.similarity_function`: '{similarity_function}'
+        }}}}
+        """
+
+        try:
+            async with self.driver.session() as session:
+                await session.run(query)
+                logger.info(f"Created vector index '{index_name}' on {node_label}.{property_name}")
+                return True
+        except Exception as e:
+            logger.error(f"Failed to create vector index '{index_name}': {e}")
+            return False
+
+    async def search_similar_memories(
+        self,
+        query_vector: list[float],
+        top_k: int = 10,
+        min_confidence: float = 0.4,
+        min_similarity: float = 0.65,
+        memory_types: Optional[list[str]] = None,
+    ) -> list[dict[str, Any]]:
+        """Search for similar memories using vector similarity.
+
+        Args:
+            query_vector: Query embedding vector (768 dimensions)
+            top_k: Number of results to return
+            min_confidence: Minimum extraction confidence threshold
+            min_similarity: Minimum cosine similarity threshold
+            memory_types: Optional filter by memory types
+
+        Returns:
+            List of memory dictionaries with similarity scores
+        """
+        if not self.driver:
+            logger.error("Cannot search memories: Driver not initialized")
+            return []
+
+        # Retrieve more results initially to allow for filtering
+        search_k = top_k * 2
+
+        query = """
+        CALL db.index.vector.queryNodes('memory_embeddings', $search_k, $query_vector)
+        YIELD node AS memory, score
+        WHERE memory.confidence >= $min_confidence
+          AND score >= $min_similarity
+        """
+
+        # Add memory type filter if specified
+        if memory_types:
+            query += " AND memory.memory_type IN $memory_types"
+
+        query += """
+        RETURN
+          memory.memory_id AS memory_id,
+          memory.memory_type AS memory_type,
+          memory.content AS content,
+          memory.confidence AS confidence,
+          memory.source_conversation_id AS source_conversation_id,
+          memory.extraction_timestamp AS extraction_timestamp,
+          memory.category AS category,
+          memory.metadata AS metadata,
+          memory.embedding_version AS embedding_version,
+          memory.embedding_updated_at AS embedding_updated_at,
+          score AS similarity_score
+        ORDER BY score DESC
+        LIMIT $top_k
+        """
+
+        try:
+            async with self.driver.session() as session:
+                result = await session.run(
+                    query,
+                    search_k=search_k,
+                    query_vector=query_vector,
+                    min_confidence=min_confidence,
+                    min_similarity=min_similarity,
+                    memory_types=memory_types,
+                    top_k=top_k,
+                )
+                records = [record.data() async for record in result]
+                logger.debug(f"Found {len(records)} similar memories (top_k={top_k})")
+                return records
+        except Exception as e:
+            logger.error(f"Failed to search similar memories: {e}")
+            return []
+
+    async def store_embedding(
+        self,
+        memory_id: str,
+        embedding: list[float],
+        embedding_version: str,
+    ) -> bool:
+        """Store embedding vector on a Memory node.
+
+        Args:
+            memory_id: Memory node ID
+            embedding: Embedding vector (768 dimensions)
+            embedding_version: Model version (e.g., 'nomic-embed-text-v1')
+
+        Returns:
+            True if stored successfully, False otherwise
+        """
+        if not self.driver:
+            logger.error("Cannot store embedding: Driver not initialized")
+            return False
+
+        query = """
+        MATCH (m:Memory {memory_id: $memory_id})
+        SET m.embedding = $embedding,
+            m.has_embedding = true,
+            m.embedding_version = $embedding_version,
+            m.embedding_updated_at = datetime()
+        RETURN m.memory_id AS id
+        """
+
+        try:
+            async with self.driver.session() as session:
+                result = await session.run(
+                    query,
+                    memory_id=memory_id,
+                    embedding=embedding,
+                    embedding_version=embedding_version,
+                )
+                record = await result.single()
+                if record:
+                    logger.debug(f"Stored embedding for memory {memory_id}")
+                    return True
+                else:
+                    logger.warning(f"Memory {memory_id} not found")
+                    return False
+        except Exception as e:
+            logger.error(f"Failed to store embedding for {memory_id}: {e}")
+            return False
+
+    async def get_memories_without_embeddings(
+        self, batch_size: int = 25
+    ) -> list[dict[str, Any]]:
+        """Retrieve memories that need embeddings generated.
+
+        Args:
+            batch_size: Number of memories to retrieve
+
+        Returns:
+            List of memory dictionaries (memory_id, memory_type, content)
+        """
+        if not self.driver:
+            logger.error("Cannot query memories: Driver not initialized")
+            return []
+
+        query = """
+        MATCH (m:Memory)
+        WHERE m.has_embedding = false OR m.has_embedding IS NULL
+        RETURN
+          m.id AS memory_id,
+          m.type AS memory_type,
+          m.content AS content
+        LIMIT $batch_size
+        """
+
+        try:
+            async with self.driver.session() as session:
+                result = await session.run(query, batch_size=batch_size)
+                records = [record.data() async for record in result]
+                logger.debug(f"Found {len(records)} memories without embeddings")
+                return records
+        except Exception as e:
+            logger.error(f"Failed to query memories without embeddings: {e}")
+            return []

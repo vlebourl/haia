@@ -96,6 +96,67 @@ class Settings(BaseSettings):
         le=1.0,
     )
 
+    # Embedding Configuration (Session 8 - Memory Retrieval)
+    embedding_model: str = Field(
+        "ollama:nomic-embed-text",
+        description="Embedding model in 'provider:model' format",
+    )
+    embedding_dim: int = Field(
+        768,
+        description="Embedding vector dimensions",
+        ge=1,
+    )
+    retrieval_top_k: int = Field(
+        10,
+        description="Number of memories to retrieve in semantic search",
+        ge=1,
+        le=100,
+    )
+    retrieval_min_similarity: float = Field(
+        0.65,
+        description="Minimum cosine similarity threshold for retrieval",
+        ge=0.0,
+        le=1.0,
+    )
+    retrieval_min_confidence: float = Field(
+        0.4,
+        description="Minimum confidence threshold for retrieved memories",
+        ge=0.0,
+        le=1.0,
+    )
+
+    # Memory Type Weights (Session 8 - User Story 3: Relevance Filtering)
+    memory_type_weight_preference: float = Field(
+        1.2,
+        description="Relevance weight multiplier for preference memories",
+        ge=0.0,
+        le=10.0,
+    )
+    memory_type_weight_technical_context: float = Field(
+        1.1,
+        description="Relevance weight multiplier for technical context memories",
+        ge=0.0,
+        le=10.0,
+    )
+    memory_type_weight_decision: float = Field(
+        1.0,
+        description="Relevance weight multiplier for decision memories (baseline)",
+        ge=0.0,
+        le=10.0,
+    )
+    memory_type_weight_personal_fact: float = Field(
+        0.9,
+        description="Relevance weight multiplier for personal fact memories",
+        ge=0.0,
+        le=10.0,
+    )
+    memory_type_weight_correction: float = Field(
+        1.3,
+        description="Relevance weight multiplier for correction memories (highest priority)",
+        ge=0.0,
+        le=10.0,
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )

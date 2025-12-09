@@ -195,6 +195,121 @@ MATCH (c:Conversation)-[:CONTAINS_MEMORY]->(m:Memory) RETURN c, m
 
 ---
 
+## Memory Retrieval System (Session 8)
+
+**Session 8 completes the memory lifecycle** - HAIA now automatically retrieves and uses learned memories in conversations!
+
+### How It Works
+
+The memory retrieval system uses embedding-based semantic search to find relevant memories:
+
+1. **Embedding Generation**: When a memory is extracted (Session 7), a background worker automatically generates an embedding vector using Ollama's nomic-embed-text model
+2. **Semantic Search**: When a user sends a message, HAIA:
+   - Generates an embedding for the query
+   - Searches Neo4j vector index for similar memories
+   - Ranks results by relevance (similarity + confidence + recency)
+3. **Context Injection**: Top-K relevant memories are formatted as natural language and injected into the conversation context
+4. **Personalized Responses**: HAIA uses retrieved memories to provide context-aware, personalized answers
+
+### Key Features
+
+- **Automatic Embedding Generation**: Backfill worker runs every 60 seconds to generate embeddings for new memories
+- **Multi-Factor Relevance Scoring**: Combines vector similarity, extraction confidence, and recency
+- **Graceful Degradation**: System continues without memories if Ollama or retrieval service unavailable
+- **Neo4j Vector Index**: HNSW algorithm with cosine similarity for fast, accurate search
+
+### Configuration
+
+Add to your `.env` file:
+
+```bash
+# Ollama Embedding Service (Session 8)
+OLLAMA_BASE_URL=http://192.168.1.37:11434  # Change to your Ollama server
+EMBEDDING_MODEL=ollama:nomic-embed-text     # Embedding model
+EMBEDDING_DIM=768                           # Embedding dimensions (nomic-embed-text uses 768)
+```
+
+**Important**: You must have Ollama running with the `nomic-embed-text` model:
+
+```bash
+# Install Ollama (if not already installed)
+curl https://ollama.ai/install.sh | sh
+
+# Pull the embedding model
+ollama pull nomic-embed-text
+```
+
+### Deployment Considerations
+
+**Docker Deployment**: If running HAIA in Docker, ensure the container can reach your Ollama server:
+- For Ollama on same host: Use host IP (e.g., `http://192.168.1.37:11434`)
+- For Ollama on different host: Use that host's IP
+- **Don't use `localhost`** in Docker - it refers to the container, not the host
+
+**Native Deployment**: If running HAIA natively, you can use `http://localhost:11434` if Ollama is on the same machine.
+
+### Monitoring Memory Retrieval
+
+```bash
+# View retrieval logs
+docker logs haia-api | grep -E "retriev|embedding|relevance"
+
+# Check health endpoint (includes retrieval status)
+curl http://localhost:8888/health
+
+# Query Neo4j to see memories with embeddings
+docker exec haia-neo4j cypher-shell -u neo4j -p your_password \
+  "MATCH (m:Memory) WHERE m.has_embedding = true RETURN count(m) as total_with_embeddings"
+
+# View vector index status
+docker exec haia-neo4j cypher-shell -u neo4j -p your_password \
+  "SHOW INDEXES WHERE name = 'memory_embeddings'"
+```
+
+### Testing Memory Retrieval
+
+To verify retrieval is working:
+
+1. **Have a conversation** that expresses a preference:
+   ```
+   User: "I really prefer using Docker over Podman for container management"
+   ```
+
+2. **Wait for boundary detection** (10+ minutes idle) to trigger extraction
+
+3. **Check memory was stored**:
+   ```bash
+   docker exec haia-neo4j cypher-shell -u neo4j -p your_password \
+     "MATCH (m:Memory) WHERE m.content CONTAINS 'Docker' RETURN m.content, m.has_embedding"
+   ```
+
+4. **Ask a related question** in a new conversation:
+   ```
+   User: "What container technology should I use for my homelab?"
+   ```
+
+5. **HAIA should reference your preference** in the response!
+
+### Troubleshooting
+
+**"No memories retrieved"**:
+- Check Ollama is running and accessible: `curl http://your-ollama-host:11434/api/tags`
+- Verify OLLAMA_BASE_URL in `.env` is correct
+- Check health endpoint shows retrieval service as "healthy"
+- Verify memories have embeddings: see query above
+
+**"Backfill worker not generating embeddings"**:
+- Check logs: `docker logs haia-api | grep backfill`
+- Verify Ollama has nomic-embed-text model: `ollama list`
+- Restart HAIA container: `docker compose -f deployment/docker-compose.yml restart haia`
+
+**"Retrieval service degraded"**:
+- Check Ollama connectivity: `curl http://your-ollama-host:11434/api/tags`
+- Verify Neo4j vector index exists: see query above
+- Check OLLAMA_BASE_URL points to accessible endpoint
+
+---
+
 ## Quick Start
 
 ### Option 1: Docker Compose (Recommended)

@@ -41,6 +41,8 @@ class ConversationTracker:
         max_tracked_conversations: int = 1000,
         extraction_service: "ExtractionService | None" = None,
         memory_storage_service: "MemoryStorageService | None" = None,
+        ollama_client: "OllamaClient | None" = None,
+        embedding_version: str = "nomic-embed-text-v1",
     ):
         """Initialize the conversation tracker.
 
@@ -51,6 +53,8 @@ class ConversationTracker:
             max_tracked_conversations: Maximum conversations to track (LRU eviction)
             extraction_service: Optional service for extracting memories from transcripts
             memory_storage_service: Optional service for storing extracted memories in Neo4j
+            ollama_client: Optional Ollama client for generating embeddings (Session 8)
+            embedding_version: Embedding model version identifier
         """
         self._storage = TranscriptStorage(storage_dir)
         self._idle_threshold_minutes = idle_threshold_minutes
@@ -58,6 +62,8 @@ class ConversationTracker:
         self._max_tracked_conversations = max_tracked_conversations
         self._extraction_service = extraction_service
         self._memory_storage_service = memory_storage_service
+        self._ollama_client = ollama_client
+        self._embedding_version = embedding_version
 
         # In-memory metadata storage with LRU tracking
         self._metadata: dict[str, ConversationMetadata] = {}
@@ -75,6 +81,7 @@ class ConversationTracker:
                 "message_drop_threshold": message_drop_threshold,
                 "max_conversations": max_tracked_conversations,
                 "memory_extraction_enabled": extraction_service is not None,
+                "embedding_generation_enabled": ollama_client is not None,
             },
         )
 
@@ -469,12 +476,59 @@ class ConversationTracker:
                 extraction_result
             )
 
+            # Generate and store embeddings for extracted memories (Session 8)
+            embedding_count = 0
+            if self._ollama_client and stored_count > 0:
+                try:
+                    logger.debug(
+                        f"Generating embeddings for {stored_count} memories",
+                        extra={"conversation_id": transcript.conversation_id},
+                    )
+
+                    for memory in extraction_result.memories:
+                        try:
+                            # Generate embedding
+                            embedding = await self._ollama_client.embed(memory.content)
+
+                            # Store embedding with memory
+                            success = await self._memory_storage_service.store_embedding(
+                                memory_id=memory.memory_id,
+                                embedding=embedding,
+                                embedding_version=self._embedding_version,
+                            )
+
+                            if success:
+                                embedding_count += 1
+
+                        except Exception as e:
+                            # Don't block extraction if embedding fails for one memory
+                            logger.warning(
+                                f"Failed to generate/store embedding for memory {memory.memory_id}: {e}",
+                                extra={
+                                    "conversation_id": transcript.conversation_id,
+                                    "memory_id": memory.memory_id,
+                                },
+                            )
+
+                    logger.info(
+                        f"Generated embeddings for {embedding_count}/{stored_count} memories",
+                        extra={"conversation_id": transcript.conversation_id},
+                    )
+
+                except Exception as e:
+                    # Don't block extraction if embedding generation fails completely
+                    logger.warning(
+                        f"Failed to generate embeddings: {e}",
+                        extra={"conversation_id": transcript.conversation_id},
+                    )
+
             logger.info(
                 "Memory extraction and storage complete",
                 extra={
                     "conversation_id": transcript.conversation_id,
                     "memories_extracted": extraction_result.memory_count,
                     "memories_stored": stored_count,
+                    "embeddings_generated": embedding_count,
                     "extraction_duration": extraction_result.extraction_duration,
                 },
             )

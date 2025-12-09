@@ -7,6 +7,7 @@ from contextvars import ContextVar
 from fastapi import Header
 from pydantic_ai import Agent
 
+from haia.embedding.retrieval_service import RetrievalService
 from haia.memory.tracker import ConversationTracker
 from haia.services.neo4j import Neo4jService
 
@@ -21,6 +22,9 @@ _conversation_tracker: ConversationTracker | None = None
 
 # Global Neo4j service instance (initialized at startup)
 _neo4j_service: Neo4jService | None = None
+
+# Global retrieval service instance (initialized at startup) - Session 8
+_retrieval_service: RetrievalService | None = None
 
 # Logger
 logger = logging.getLogger(__name__)
@@ -121,3 +125,26 @@ def set_neo4j_service(service: Neo4jService) -> None:
     """
     global _neo4j_service
     _neo4j_service = service
+
+
+def get_retrieval_service() -> RetrievalService | None:
+    """FastAPI dependency for retrieval service injection.
+
+    Returns:
+        RetrievalService instance or None if not initialized
+
+    Note:
+        Returns None instead of raising to allow graceful degradation
+        if Ollama is unavailable during startup.
+    """
+    return _retrieval_service
+
+
+def set_retrieval_service(service: RetrievalService) -> None:
+    """Set the global retrieval service instance (called during startup).
+
+    Args:
+        service: Configured RetrievalService
+    """
+    global _retrieval_service
+    _retrieval_service = service
