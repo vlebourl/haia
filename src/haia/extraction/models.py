@@ -7,19 +7,13 @@ extraction output, and memory representation with full type safety and validatio
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, computed_field, field_validator
 
 
-class MemoryCategory(str, Enum):
-    """Primary memory categories (maps to memory_type field)."""
-
-    PREFERENCE = "preference"
-    PERSONAL_FACT = "personal_fact"
-    TECHNICAL_CONTEXT = "technical_context"
-    DECISION = "decision"
-    CORRECTION = "correction"
+# MemoryCategory enum REMOVED in Session 10 - Dynamic types now LLM-generated
+# No hardcoded categories (P1: Emergence Over Prescription principle)
 
 
 class ConfidenceLevel(str, Enum):
@@ -68,15 +62,23 @@ class ConversationTranscript(BaseModel):
 
 
 class ExtractedMemory(BaseModel):
-    """A single memory extracted from conversation transcript."""
+    """A single memory extracted from conversation transcript.
+
+    Session 10 Changes:
+    - memory_type is now dynamic str (LLM-generated, no hardcoded categories)
+    - Added bi-temporal properties (valid_from, valid_until, learned_at)
+    - Added superseding chain properties (superseded_by, supersedes)
+    - Added tier property for consolidation lifecycle
+    """
 
     memory_id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
         description="Unique memory identifier",
     )
-    memory_type: Literal[
-        "preference", "personal_fact", "technical_context", "decision", "correction"
-    ] = Field(..., description="Primary category of memory")
+    memory_type: str = Field(
+        ...,
+        description="Dynamic LLM-generated type (e.g., 'docker_container_deployment_preference')",
+    )
     content: str = Field(
         ..., min_length=1, description="Natural language description of the memory"
     )
@@ -85,7 +87,7 @@ class ExtractedMemory(BaseModel):
     )
     category: str | None = Field(
         None,
-        description="Optional subcategory (e.g., 'infrastructure', 'tool_preference')",
+        description="Optional subcategory (deprecated - use memory_type instead)",
     )
     source_conversation_id: str = Field(
         ..., description="ID of conversation this memory came from"
@@ -111,8 +113,34 @@ class ExtractedMemory(BaseModel):
         None, description="When embedding was last generated/updated"
     )
 
+    # Bi-temporal properties (Session 10 - Phase 1)
+    valid_from: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="When this memory became valid (event time)",
+    )
+    valid_until: Optional[datetime] = Field(
+        None, description="When this memory stopped being valid (None = currently valid)"
+    )
+    learned_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="When we learned this information (ingestion time)",
+    )
+
+    # Superseding chain properties (Session 10 - Phase 1)
+    superseded_by: Optional[str] = Field(
+        None, description="Memory ID that supersedes this one (None = not superseded)"
+    )
+    supersedes: Optional[str] = Field(
+        None, description="Memory ID that this one supersedes (None = doesn't supersede)"
+    )
+
+    # Consolidation tier (Session 10 - Phase 4)
+    tier: Literal["short_term", "long_term", "archived"] = Field(
+        default="short_term", description="Memory lifecycle tier"
+    )
+
     # Access tracking fields (Session 9 - Context Optimization)
-    last_accessed: datetime | None = Field(
+    last_accessed: Optional[datetime] = Field(
         None, description="Timestamp of most recent access (UTC)"
     )
     access_count: int = Field(
