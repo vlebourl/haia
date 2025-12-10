@@ -960,3 +960,171 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Failed to reset access metadata: {e}", exc_info=True)
             return 0
+
+    # =========================================================================
+    # SESSION 10: TEMPORAL TRACKING & BM25 SEARCH (Phase 1 - User Story 1)
+    # =========================================================================
+
+    async def search_memories_bm25(
+        self,
+        query_text: str,
+        top_k: int = 10,
+        min_score: float = 0.1,
+        memory_types: Optional[list[str]] = None,
+    ) -> list[dict[str, Any]]:
+        """Search memories using BM25 full-text index on content.
+
+        Uses Neo4j full-text index with BM25-like scoring for keyword relevance.
+        Gracefully degrades to empty results if index unavailable.
+
+        Args:
+            query_text: Search query (keywords, phrases)
+            top_k: Maximum number of results to return
+            min_score: Minimum BM25 score threshold (0.0-1.0)
+            memory_types: Optional filter by memory types
+
+        Returns:
+            List of memory dicts with BM25 scores, sorted by relevance
+
+        Example:
+            results = await neo4j.search_memories_bm25(
+                "docker container deployment",
+                top_k=5,
+                min_score=0.2
+            )
+        """
+        if not self.driver:
+            logger.error("Neo4j driver not initialized for BM25 search")
+            return []
+
+        try:
+            async with self.driver.session() as session:
+                # Build type filter clause if provided
+                type_filter = ""
+                params: dict[str, Any] = {
+                    "query": query_text,
+                    "limit": top_k,
+                }
+
+                if memory_types:
+                    type_filter = "AND node.memory_type IN $memory_types"
+                    params["memory_types"] = memory_types
+
+                # Use full-text index for BM25 search
+                query = f"""
+                CALL db.index.fulltext.queryNodes(
+                    'memory_content_fulltext',
+                    $query
+                ) YIELD node, score
+                WHERE score >= {min_score} {type_filter}
+                RETURN
+                    node.memory_id AS memory_id,
+                    node.content AS content,
+                    node.memory_type AS memory_type,
+                    node.confidence AS confidence,
+                    node.valid_from AS valid_from,
+                    node.valid_until AS valid_until,
+                    node.learned_at AS learned_at,
+                    node.tier AS tier,
+                    score AS bm25_score
+                ORDER BY score DESC
+                LIMIT $limit
+                """
+
+                result = await session.run(query, **params)
+                records = await result.data()
+
+                logger.debug(
+                    f"BM25 search for '{query_text}' returned {len(records)} results"
+                )
+
+                return records
+
+        except Exception as e:
+            # Graceful degradation: log error but don't crash
+            logger.error(
+                f"BM25 search failed (index may not exist): {e}",
+                exc_info=True,
+            )
+            logger.warning(
+                "Returning empty BM25 results - check if full-text index exists"
+            )
+            return []
+
+    async def get_memories_valid_at(
+        self,
+        target_datetime: Any,  # datetime or ISO string
+        top_k: int = 100,
+        memory_types: Optional[list[str]] = None,
+    ) -> list[dict[str, Any]]:
+        """Query memories that were valid at a specific point in time.
+
+        Temporal query: Returns memories where:
+        - valid_from <= target_datetime
+        - valid_until IS NULL OR valid_until > target_datetime
+
+        Args:
+            target_datetime: Target time (datetime object or ISO string)
+            top_k: Maximum number of results
+            memory_types: Optional filter by memory types
+
+        Returns:
+            List of memory dicts valid at target time, sorted by valid_from DESC
+
+        Example:
+            # Get memories valid on October 15, 2024
+            memories = await neo4j.get_memories_valid_at(
+                datetime(2024, 10, 15),
+                top_k=50
+            )
+        """
+        if not self.driver:
+            logger.error("Neo4j driver not initialized for temporal query")
+            return []
+
+        try:
+            async with self.driver.session() as session:
+                # Build type filter clause if provided
+                type_filter = ""
+                params: dict[str, Any] = {
+                    "target_time": target_datetime,
+                    "limit": top_k,
+                }
+
+                if memory_types:
+                    type_filter = "AND m.memory_type IN $memory_types"
+                    params["memory_types"] = memory_types
+
+                # Temporal range query using composite index
+                query = f"""
+                MATCH (m:Memory)
+                WHERE m.valid_from <= datetime($target_time)
+                  AND (m.valid_until IS NULL OR m.valid_until > datetime($target_time))
+                  {type_filter}
+                RETURN
+                    m.memory_id AS memory_id,
+                    m.content AS content,
+                    m.memory_type AS memory_type,
+                    m.confidence AS confidence,
+                    m.valid_from AS valid_from,
+                    m.valid_until AS valid_until,
+                    m.learned_at AS learned_at,
+                    m.tier AS tier,
+                    m.superseded_by AS superseded_by,
+                    m.supersedes AS supersedes
+                ORDER BY m.valid_from DESC
+                LIMIT $limit
+                """
+
+                result = await session.run(query, **params)
+                records = await result.data()
+
+                logger.debug(
+                    f"Temporal query for {target_datetime} returned {len(records)} memories"
+                )
+
+                return records
+
+        except Exception as e:
+            logger.error(f"Temporal query failed: {e}", exc_info=True)
+            return []
