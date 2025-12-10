@@ -6,8 +6,11 @@ A standalone AI assistant application for homelab administration, monitoring, an
 
 - 🧠 **Memory System**: HAIA learns from conversations and provides personalized responses
   - Automatic memory extraction from conversations
-  - Embedding-based semantic memory retrieval
+  - Bi-temporal tracking with automatic contradiction resolution
+  - Dynamic LLM-generated memory types (zero hardcoded categories)
+  - BM25 full-text search + embedding-based semantic retrieval
   - Context optimization with deduplication and re-ranking
+  - Point-in-time queries: "What did I know on date X?"
   - Neo4j graph database for persistent memory storage
 - 💬 **OpenAI-Compatible API**: Chat interface compatible with OpenWebUI and other clients
 - 🖥️ **Infrastructure Monitoring**: Track Proxmox VMs, containers, and services (coming soon)
