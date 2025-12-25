@@ -30,6 +30,9 @@ class HAIAScheduler:
         type_clustering_schedule: str = "0 4 * * *",  # Daily at 4 AM
         min_cluster_size: int = 3,
         similarity_threshold: float = 0.80,
+        embedding_provider: str = "google",
+        google_api_key: Optional[str] = None,
+        google_embedding_model: str = "text-embedding-004",
     ):
         """
         Initialize HAIA scheduler.
@@ -41,6 +44,9 @@ class HAIAScheduler:
             type_clustering_schedule: Cron expression for clustering schedule
             min_cluster_size: Minimum types per cluster
             similarity_threshold: Cosine similarity threshold
+            embedding_provider: "google" or "local" for embeddings
+            google_api_key: Google API key (required if provider="google")
+            google_embedding_model: Google embedding model name
         """
         self.neo4j = neo4j_service
         self.extraction_model = extraction_model
@@ -48,6 +54,9 @@ class HAIAScheduler:
         self.type_clustering_schedule = type_clustering_schedule
         self.min_cluster_size = min_cluster_size
         self.similarity_threshold = similarity_threshold
+        self.embedding_provider = embedding_provider
+        self.google_api_key = google_api_key
+        self.google_embedding_model = google_embedding_model
 
         # Initialize scheduler
         self.scheduler: Optional[AsyncIOScheduler] = None
@@ -63,8 +72,13 @@ class HAIAScheduler:
                 extraction_model=self.extraction_model,
                 min_cluster_size=self.min_cluster_size,
                 similarity_threshold=self.similarity_threshold,
+                embedding_provider=self.embedding_provider,
+                google_api_key=self.google_api_key,
+                google_embedding_model=self.google_embedding_model,
             )
-            logger.info("TypeClusterer service initialized")
+            logger.info(
+                f"TypeClusterer service initialized with {self.embedding_provider} embeddings"
+            )
 
     async def _run_type_clustering_job(self):
         """

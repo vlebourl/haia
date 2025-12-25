@@ -7,14 +7,15 @@ Semantic clustering of memory types to prevent proliferation.
 
 import logging
 from datetime import datetime
+from typing import Literal, Optional
 
 import numpy as np
 from pydantic_ai import Agent
-from sentence_transformers import SentenceTransformer
 from sklearn.cluster import DBSCAN
 from sklearn.metrics.pairwise import cosine_similarity
 
 from haia.clustering.type_models import SemanticNeighbor, TypeCluster, TypeHierarchy
+from haia.embedding.google_embeddings import GoogleEmbeddingClient
 from haia.services.neo4j import Neo4jService
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,9 @@ class TypeClusterer:
         extraction_model: str = "anthropic:claude-haiku-4-5-20251001",
         min_cluster_size: int = 3,  # 📐 G1: Min 3 types
         similarity_threshold: float = 0.80,  # 📐 G1: Cosine similarity
+        embedding_provider: Literal["google", "local"] = "google",
+        google_api_key: Optional[str] = None,
+        google_embedding_model: str = "text-embedding-004",
     ):
         """
         Initialize TypeClusterer.
@@ -49,18 +53,43 @@ class TypeClusterer:
             extraction_model: Model to use for LLM label generation (Haiku for cost)
             min_cluster_size: Minimum types per cluster (default: 3)
             similarity_threshold: Cosine similarity threshold (default: 0.80)
+            embedding_provider: "google" for API or "local" for sentence-transformers
+            google_api_key: Google API key (required if provider="google")
+            google_embedding_model: Google embedding model name
         """
         self.neo4j = neo4j_service
         self.extraction_model = extraction_model
         self.min_cluster_size = min_cluster_size
         self.similarity_threshold = similarity_threshold
+        self.embedding_provider = embedding_provider
 
-        # Sentence transformer for type embeddings
-        # all-MiniLM-L6-v2: Fast, efficient, 384-dim embeddings
-        self.type_encoder = SentenceTransformer("all-MiniLM-L6-v2")
+        # Initialize embedding encoder based on provider
+        if embedding_provider == "google":
+            if not google_api_key:
+                raise ValueError("google_api_key required when embedding_provider='google'")
+            self.type_encoder = GoogleEmbeddingClient(
+                api_key=google_api_key,
+                model=google_embedding_model,
+            )
+            logger.info(
+                f"TypeClusterer initialized with Google embeddings: {google_embedding_model}"
+            )
+        else:  # local
+            try:
+                from sentence_transformers import SentenceTransformer
+
+                # all-MiniLM-L6-v2: Fast, efficient, 384-dim embeddings
+                self.type_encoder = SentenceTransformer("all-MiniLM-L6-v2")
+                logger.info("TypeClusterer initialized with local sentence-transformers")
+            except ImportError:
+                logger.error(
+                    "sentence-transformers not installed. Install with: pip install sentence-transformers"
+                )
+                raise
+
         logger.info(
-            f"TypeClusterer initialized: min_size={min_cluster_size}, "
-            f"threshold={similarity_threshold}"
+            f"TypeClusterer config: min_size={min_cluster_size}, "
+            f"threshold={similarity_threshold}, provider={embedding_provider}"
         )
 
     async def get_all_types(self) -> list[str]:

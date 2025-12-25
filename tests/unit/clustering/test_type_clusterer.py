@@ -19,19 +19,23 @@ def mock_neo4j_service():
 @pytest.fixture
 def type_clusterer(mock_neo4j_service):
     """Create TypeClusterer instance with mocked dependencies."""
-    with patch("haia.clustering.type_clusterer.SentenceTransformer") as mock_st:
-        # Mock the encoder to avoid CUDA issues
-        mock_encoder = MagicMock()
-        mock_st.return_value = mock_encoder
+    # Mock the Google embedding client to avoid API calls
+    mock_encoder = MagicMock()
+    mock_encoder.encode.return_value = np.array([])  # Default empty response
+
+    with patch("haia.clustering.type_clusterer.GoogleEmbeddingClient") as mock_google:
+        mock_google.return_value = mock_encoder
 
         clusterer = TypeClusterer(
             neo4j_service=mock_neo4j_service,
             extraction_model="anthropic:claude-haiku-4-5-20251001",
             min_cluster_size=3,
             similarity_threshold=0.80,
+            embedding_provider="google",
+            google_api_key="test-api-key",  # Mock API key for tests
+            google_embedding_model="text-embedding-004",
         )
-        # Replace the encoder with our mock after initialization
-        clusterer.type_encoder = mock_encoder
+        # Encoder is already mocked
         return clusterer
 
 
@@ -39,27 +43,37 @@ class TestTypeClustererInit:
     """Test TypeClusterer initialization."""
 
     def test_init_with_defaults(self, mock_neo4j_service):
-        """Test initialization with default parameters."""
-        clusterer = TypeClusterer(neo4j_service=mock_neo4j_service)
+        """Test initialization with default parameters (Google embeddings)."""
+        with patch("haia.clustering.type_clusterer.GoogleEmbeddingClient"):
+            clusterer = TypeClusterer(
+                neo4j_service=mock_neo4j_service,
+                google_api_key="test-key",  # Required for default google provider
+            )
 
-        assert clusterer.neo4j == mock_neo4j_service
-        assert clusterer.extraction_model == "anthropic:claude-haiku-4-5-20251001"
-        assert clusterer.min_cluster_size == 3
-        assert clusterer.similarity_threshold == 0.80
-        assert clusterer.type_encoder is not None
+            assert clusterer.neo4j == mock_neo4j_service
+            assert clusterer.extraction_model == "anthropic:claude-haiku-4-5-20251001"
+            assert clusterer.min_cluster_size == 3
+            assert clusterer.similarity_threshold == 0.80
+            assert clusterer.embedding_provider == "google"
+            assert clusterer.type_encoder is not None
 
     def test_init_with_custom_params(self, mock_neo4j_service):
         """Test initialization with custom parameters."""
-        clusterer = TypeClusterer(
-            neo4j_service=mock_neo4j_service,
-            extraction_model="anthropic:claude-sonnet-4-5-20250929",
-            min_cluster_size=5,
-            similarity_threshold=0.75,
-        )
+        with patch("haia.clustering.type_clusterer.GoogleEmbeddingClient"):
+            clusterer = TypeClusterer(
+                neo4j_service=mock_neo4j_service,
+                extraction_model="anthropic:claude-sonnet-4-5-20250929",
+                min_cluster_size=5,
+                similarity_threshold=0.75,
+                embedding_provider="google",
+                google_api_key="test-key",
+                google_embedding_model="text-embedding-004",
+            )
 
-        assert clusterer.extraction_model == "anthropic:claude-sonnet-4-5-20250929"
-        assert clusterer.min_cluster_size == 5
-        assert clusterer.similarity_threshold == 0.75
+            assert clusterer.extraction_model == "anthropic:claude-sonnet-4-5-20250929"
+            assert clusterer.min_cluster_size == 5
+            assert clusterer.similarity_threshold == 0.75
+            assert clusterer.embedding_provider == "google"
 
 
 class TestGetAllTypes:
