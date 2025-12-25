@@ -24,14 +24,16 @@ class ExtractionService:
     def __init__(
         self,
         model: KnownModelName | str = "anthropic:claude-haiku-4-5-20251001",
-        min_confidence: float = 0.4,
+        min_confidence: float = 0.6,
     ):
         """Initialize extraction service with PydanticAI agent.
+
+        Session 10: Increased min_confidence from 0.4 to 0.6 for dynamic types (G4: High Confidence).
 
         Args:
             model: LLM model to use (e.g., 'anthropic:claude-haiku-4-5-20251001',
                    'ollama:qwen2.5-coder', 'ollama:llama3.1')
-            min_confidence: Minimum confidence threshold for memories (default: 0.4)
+            min_confidence: Minimum confidence threshold for memories (default: 0.6)
         """
         self.model = model
         self.min_confidence = min_confidence

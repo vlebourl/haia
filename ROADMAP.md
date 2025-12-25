@@ -1,13 +1,13 @@
 # HAIA Development Roadmap
 
-**Last Updated**: 2025-12-09
-**Version**: 0.3.0
+**Last Updated**: 2025-12-10
+**Version**: 0.4.0
 
 ## Overview
 
 This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Features are organized by phase, with dependencies clearly marked.
 
-**Current Status**: Phase 2 Memory System COMPLETE - OpenAI-compatible API with streaming, conversation boundary detection, Neo4j memory infrastructure, automatic memory extraction, embedding-based memory retrieval, AND context optimization all operational. HAIA now learns from conversations, retrieves relevant memories, deduplicates/re-ranks them, and stays within token budgets. **Phase 3 (homelab tool integration) is next.**
+**Current Status**: Phase 2 Memory System IN PROGRESS - Sessions 1-10 complete. OpenAI-compatible API with streaming, conversation boundary detection, Neo4j memory infrastructure, automatic memory extraction, embedding-based retrieval, context optimization, AND hybrid temporal memory MVP all operational. Session 10 MVP delivers bi-temporal tracking and dynamic entity types (zero hardcoded categories). **Phase 2 continuation (type clustering, relationship inference) and Phase 3 (homelab tool integration) are next.**
 
 ## Roadmap Phases
 
@@ -221,7 +221,60 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 
 ---
 
-### Phase 2: Memory System Completion [COMPLETE]
+### Phase 2: Memory System Completion [IN PROGRESS]
+
+#### ✅ [P2] Hybrid Temporal Memory System MVP [Session 10]
+
+**Status**: COMPLETE (PR #11, 2025-12-10)
+
+**Description**: Implement bi-temporal memory tracking with automatic contradiction resolution and dynamic LLM-generated entity types. Removes all hardcoded categories, enabling emergent type taxonomy and point-in-time historical queries.
+
+**User Value**: HAIA now tracks how knowledge evolves over time, automatically handles contradictions while preserving history, and generates semantic memory types without schema constraints. Users can query "What did I know on date X?" and see memories organized by emergent patterns.
+
+**Implementation Approach**:
+- Bi-temporal properties: `valid_from`, `valid_until`, `learned_at` (event time vs ingestion time)
+- Automatic contradiction detection using semantic similarity (cosine >0.75)
+- Superseding mechanism: old memories preserved with SUPERSEDES relationships (P2: Temporal Truth)
+- Dynamic type generation: Removed `MemoryCategory` enum, LLM generates types following `domain_aspect_type` pattern
+- BM25 full-text search with Neo4j native fulltext index + graceful degradation
+- Temporal queries using composite indexes for point-in-time state reconstruction
+- Database migrations (010: temporal properties, 011: BM25 + temporal indexes)
+- Configuration: 7 new env vars (BM25_SEARCH_ENABLED, MIN_DYNAMIC_TYPE_CONFIDENCE, etc.)
+- Located in: `src/haia/extraction/`, `src/haia/services/`, `database/schema/migrations/`
+
+**Deliverables**:
+- Migration 010: Add 5 temporal properties to Memory nodes
+- Migration 011: Create BM25 fulltext index + 4 temporal indexes (all ONLINE)
+- Removed `MemoryCategory` enum from `src/haia/extraction/models.py`
+- Rewritten `src/haia/extraction/prompts.py` for dynamic types (232 lines)
+- Updated `src/haia/services/memory_storage.py`: `detect_contradiction()`, `handle_superseding()` (404 lines)
+- Extended `src/haia/services/neo4j.py`: `search_memories_bm25()`, `get_memories_valid_at()` (+168 lines)
+- Comprehensive documentation: principles framework, implementation plan, validation report
+
+**Test Coverage**:
+- 8/8 acceptance tests passed (100%)
+- Test environment: Neo4j 5.15 on isolated ports (17474/17687)
+- Temporal queries validated (October vs December state)
+- BM25 search operational (0.92-1.19 scores)
+- Zero hardcoded categories confirmed
+- All P1-P5 principles validated
+
+**Constitution Compliance**:
+- P1 (Emergence): Zero hardcoded categories, dynamic LLM-generated types
+- P2 (Temporal Truth): Old memories preserved with SUPERSEDES relationships
+- P3 (Semantic Retrieval): BM25 full-text search complements vector search
+- P4 (Graceful Degradation): Try/except error handling, fallback to empty list
+- P5 (Observability): All decisions logged (extraction, contradiction, superseding)
+
+**Effort Estimate**: L - Database migrations, LLM prompt engineering, temporal logic, comprehensive testing
+
+**Priority**: P2 - Foundation for emergent type taxonomy and temporal intelligence
+
+**Implementation Status**: 38/161 tasks (23.6%), MVP complete and production-ready
+
+**Next**: Type Clustering (US3), Relationship Inference (US4), Hybrid Retrieval (US5)
+
+---
 
 #### ✅ [P2] Context Optimization [Session 9]
 

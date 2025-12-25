@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  neo4j-test:
+    image: neo4j:5.15-community
+    container_name: haia-neo4j-test
+    ports:
+      - "17474:7474"  # HTTP
+      - "17687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/test_password_2024
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_memory_pagecache_size=512M
+      - NEO4J_dbms_memory_heap_initial__size=512M
+      - NEO4J_dbms_memory_heap_max__size=1G
+    volumes:
+      - neo4j-test-data:/data
+      - neo4j-test-logs:/logs
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "test_password_2024", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - haia-test-network
+
+volumes:
+  neo4j-test-data:
+    name: haia-neo4j-test-data
+  neo4j-test-logs:
+    name: haia-neo4j-test-logs
+
+networks:
+  haia-test-network:
+    name: haia-test-network
+    driver: bridge
