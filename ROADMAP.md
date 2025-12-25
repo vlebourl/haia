@@ -638,6 +638,26 @@ Future enhancement could include:
 
 ## Changelog
 
+- **2025-12-10**: ✅ **Completed Hybrid Temporal Memory System MVP (Session 10)**
+  - ✅ Hybrid Temporal Memory System MVP (Session 10): 8/8 acceptance tests passed, PR #11 merged
+    - Bi-temporal tracking: `valid_from`, `valid_until`, `learned_at` timestamps
+    - Automatic contradiction detection using semantic similarity (cosine >0.75)
+    - Superseding mechanism: old memories preserved with SUPERSEDES relationships (P2: Temporal Truth)
+    - Dynamic entity types: Removed `MemoryCategory` enum completely (P1: Emergence)
+    - BM25 full-text search with Neo4j native fulltext index + graceful degradation
+    - Temporal queries: "What did I know on date X?" with point-in-time state reconstruction
+    - Database migrations 010-011: 5 temporal properties + 5 indexes (all ONLINE)
+  - **User Stories Completed**:
+    - US1: Temporal Memory Tracking with automatic contradiction resolution
+    - US2: Dynamic Entity Types with LLM-generated types following `domain_aspect_type` pattern
+  - **Implementation Status**: 38/161 tasks (23.6% MVP complete)
+  - **Test Environment**: Neo4j 5.15 on isolated ports (17474/17687)
+  - **Principle Validation**: All P1-P5 principles validated (Emergence, Temporal Truth, Semantic Retrieval, Graceful Degradation, Observability)
+  - **Documentation**: Comprehensive architecture framework (principles, implementation plan, validation report)
+  - **Configuration**: 7 new environment variables (BM25_SEARCH_ENABLED, MIN_DYNAMIC_TYPE_CONFIDENCE, etc.)
+  - **Files Modified**: 7 modified + 9 new files (migrations, architecture docs, brainstorming notes)
+  - **Next Phase**: Type Clustering (US3), Relationship Inference (US4), Hybrid Retrieval (US5)
+
 - **2025-12-09**: ✅ **Completed Context Optimization (Session 9)** - Phase 2 Memory System COMPLETE
   - ✅ Context Optimization (Session 9): 43 tests passing, PR #10 merged
     - Deduplicator: Removes exact duplicates, semantic similarity (≥0.92), correction superseding
