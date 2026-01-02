@@ -37,6 +37,22 @@ class Neo4jService:
         self._password = password
         logger.info(f"Neo4j service initialized with URI: {uri}")
 
+    @staticmethod
+    def _get_id_field(label: str) -> str:
+        """
+        Dynamically determine ID field name from node label using convention.
+
+        Convention: {label}_id (lowercase)
+        Examples: Person -> person_id, Memory -> memory_id, TechPreference -> techpreference_id
+
+        Args:
+            label: Node label (e.g., "Person", "Memory")
+
+        Returns:
+            ID field name (e.g., "person_id", "memory_id")
+        """
+        return f"{label.lower()}_id"
+
     async def connect(self, max_retries: int = 5) -> None:
         """Connect to Neo4j with exponential backoff retry.
 
@@ -112,17 +128,8 @@ class Neo4jService:
             return None
 
         async def _create_tx(tx: Any, label: str, props: dict[str, Any]) -> Optional[str]:
-            # Extract the ID field based on label
-            id_field_map = {
-                "Person": "user_id",
-                "Interest": "interest_id",
-                "Infrastructure": "infra_id",
-                "TechPreference": "pref_id",
-                "Fact": "fact_id",
-                "Decision": "decision_id",
-                "Conversation": "conversation_id",
-            }
-            id_field = id_field_map.get(label, "id")
+            # Extract the ID field based on label using dynamic convention
+            id_field = self._get_id_field(label)
 
             query = f"CREATE (n:{label} $props) RETURN n.{id_field} AS id"
             result = await tx.run(query, props=props)
@@ -155,17 +162,8 @@ class Neo4jService:
             return None
 
         async def _read_tx(tx: Any, label: str, node_id: str) -> Optional[dict[str, Any]]:
-            # Determine ID field
-            id_field_map = {
-                "Person": "user_id",
-                "Interest": "interest_id",
-                "Infrastructure": "infra_id",
-                "TechPreference": "pref_id",
-                "Fact": "fact_id",
-                "Decision": "decision_id",
-                "Conversation": "conversation_id",
-            }
-            id_field = id_field_map.get(label, "id")
+            # Determine ID field using dynamic convention
+            id_field = self._get_id_field(label)
 
             query = f"MATCH (n:{label} {{{id_field}: $node_id}}) RETURN n"
             result = await tx.run(query, node_id=node_id)
@@ -204,16 +202,8 @@ class Neo4jService:
         async def _update_tx(
             tx: Any, label: str, node_id: str, props: dict[str, Any]
         ) -> bool:
-            id_field_map = {
-                "Person": "user_id",
-                "Interest": "interest_id",
-                "Infrastructure": "infra_id",
-                "TechPreference": "pref_id",
-                "Fact": "fact_id",
-                "Decision": "decision_id",
-                "Conversation": "conversation_id",
-            }
-            id_field = id_field_map.get(label, "id")
+            # Determine ID field using dynamic convention
+            id_field = self._get_id_field(label)
 
             query = f"MATCH (n:{label} {{{id_field}: $node_id}}) SET n += $props RETURN n"
             result = await tx.run(query, node_id=node_id, props=props)
@@ -245,16 +235,8 @@ class Neo4jService:
             return False
 
         async def _delete_tx(tx: Any, label: str, node_id: str) -> bool:
-            id_field_map = {
-                "Person": "user_id",
-                "Interest": "interest_id",
-                "Infrastructure": "infra_id",
-                "TechPreference": "pref_id",
-                "Fact": "fact_id",
-                "Decision": "decision_id",
-                "Conversation": "conversation_id",
-            }
-            id_field = id_field_map.get(label, "id")
+            # Determine ID field using dynamic convention
+            id_field = self._get_id_field(label)
 
             query = f"MATCH (n:{label} {{{id_field}: $node_id}}) DETACH DELETE n RETURN count(n) AS deleted"
             result = await tx.run(query, node_id=node_id)
@@ -422,18 +404,9 @@ class Neo4jService:
             to_id: str,
             props: Optional[dict[str, Any]],
         ) -> bool:
-            # Determine ID fields
-            id_field_map = {
-                "Person": "user_id",
-                "Interest": "interest_id",
-                "Infrastructure": "infra_id",
-                "TechPreference": "pref_id",
-                "Fact": "fact_id",
-                "Decision": "decision_id",
-                "Conversation": "conversation_id",
-            }
-            from_field = id_field_map.get(from_label, "id")
-            to_field = id_field_map.get(to_label, "id")
+            # Determine ID fields using dynamic convention
+            from_field = self._get_id_field(from_label)
+            to_field = self._get_id_field(to_label)
 
             if props:
                 query = f"""

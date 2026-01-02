@@ -332,7 +332,52 @@ class TypeClusteringConfig(BaseSettings):
     )
 
 
+class RelationshipInferenceConfig(BaseSettings):
+    """Configuration for LLM-driven relationship inference (Session 12).
+
+    Automatically discovers semantic relationships between memories using
+    LLM analysis rather than hardcoded rules.
+    """
+
+    # Relationship Inference
+    relationship_inference_enabled: bool = Field(
+        default=True, description="Enable automatic relationship inference"
+    )
+    relationship_min_confidence: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence threshold for storing relationships",
+    )
+    relationship_model: str | None = Field(
+        default=None,
+        description="Model for relationship inference (defaults to extraction_model or haia_model if not set)",
+    )
+    relationship_max_pairs: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Maximum memory pairs to analyze per conversation (cost control)",
+    )
+
+    # Temporal Conflict Detection
+    temporal_conflict_threshold: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description="Cosine similarity threshold for temporal conflict detection",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="RELATIONSHIP_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 # Global settings instances
 settings = Settings()
 context_optimization_config = ContextOptimizationConfig()
 type_clustering_config = TypeClusteringConfig()
+relationship_inference_config = RelationshipInferenceConfig()
