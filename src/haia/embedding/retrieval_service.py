@@ -1,13 +1,14 @@
 """Retrieval service for semantic memory search.
 
 This module provides the core retrieval functionality for memory search,
-including relevance scoring, ranking, and deduplication.
+including relevance scoring, ranking, deduplication, and hybrid retrieval.
 """
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from haia.context.access_tracker import AccessTracker
 from haia.context.budget_manager import BudgetManager
@@ -23,6 +24,13 @@ from haia.embedding.models import (
 from haia.embedding.ollama_client import OllamaClient
 from haia.extraction.models import ExtractedMemory
 from haia.services.neo4j import Neo4jService
+from src.haia.services.graph_traversal import GraphTraversalService
+from src.haia.services.rrf_merger import RRFMerger
+from src.haia.models.hybrid_retrieval import (
+    HybridRetrievalRequest,
+    MethodResult,
+    GraphTraversalConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +90,10 @@ class RetrievalService:
         self.ranker = Ranker()  # Uses default weights (40/25/20/15)
         self.access_tracker = AccessTracker(neo4j_service)
         self.budget_manager = BudgetManager()  # Default 2000 token budget
+
+        # Initialize hybrid retrieval components (Session 13)
+        self.graph_traversal = GraphTraversalService(neo4j_service=neo4j_service)
+        self.rrf_merger = RRFMerger()
 
         logger.info(
             f"RetrievalService initialized (α={similarity_weight}, β={confidence_weight}, "
@@ -525,6 +537,417 @@ class RetrievalService:
             embedding_version=data.get("embedding_version"),
             embedding_updated_at=embedding_updated,
         )
+
+    # ============================================================================
+    # Hybrid Retrieval (Session 13)
+    # ============================================================================
+
+    async def retrieve_hybrid(
+        self,
+        request: HybridRetrievalRequest,
+    ) -> list[RetrievalResult]:
+        """Retrieve memories using hybrid approach combining multiple methods.
+
+        Executes enabled retrieval methods in parallel and merges results
+        using Reciprocal Rank Fusion (RRF). Handles graceful degradation
+        when individual methods fail.
+
+        Args:
+            request: Hybrid retrieval request with configuration
+
+        Returns:
+            List of retrieval results with RRF scores and source attribution.
+            Sorted by RRF score (highest first).
+
+        Raises:
+            RuntimeError: If ALL enabled methods fail
+            ValueError: If enabled_methods contains invalid method names
+                       (caught by Pydantic validation)
+
+        Example:
+            >>> request = HybridRetrievalRequest(
+            ...     query_text="Proxmox cluster setup",
+            ...     enabled_methods={"vector", "graph"},
+            ...     top_k=5,
+            ... )
+            >>> results = await service.retrieve_hybrid(request)
+            >>> print(results[0].source_methods)
+            ["vector", "graph"]
+        """
+        start_time = time.time()
+        logger.info(
+            f"Starting hybrid retrieval with methods: {request.enabled_methods}, "
+            f"top_k={request.top_k}, graph_depth={request.graph_depth}"
+        )
+
+        # Step 1: Generate query embedding (needed for vector and graph)
+        query_embedding: Optional[list[float]] = None
+        if "vector" in request.enabled_methods or "graph" in request.enabled_methods:
+            try:
+                query_embedding = await self.generate_embedding(request.query)
+                logger.debug(f"Generated query embedding (dim={len(query_embedding)})")
+            except Exception as e:
+                logger.error(f"Failed to generate query embedding: {e}")
+                # If embedding fails and vector/graph are the only methods, this is fatal
+                if request.enabled_methods.issubset({"vector", "graph"}):
+                    raise RuntimeError(
+                        f"Cannot perform hybrid retrieval: embedding generation failed and "
+                        f"no other methods enabled"
+                    ) from e
+
+        # Step 2: Launch enabled methods in parallel
+        tasks: list[tuple[str, asyncio.Task]] = []
+
+        if "vector" in request.enabled_methods and query_embedding is not None:
+            task = asyncio.create_task(self._vector_search(query_embedding, request.top_k))
+            tasks.append(("vector", task))
+
+        if "bm25" in request.enabled_methods:
+            task = asyncio.create_task(self._bm25_search(request.query, request.top_k))
+            tasks.append(("bm25", task))
+
+        if "graph" in request.enabled_methods and query_embedding is not None:
+            task = asyncio.create_task(
+                self._graph_traversal_search(
+                    query_embedding=query_embedding,
+                    depth=request.graph_depth,
+                    top_k=request.top_k,
+                )
+            )
+            tasks.append(("graph", task))
+
+        # Step 3: Gather results with exception handling (return_exceptions=True)
+        method_names = [name for name, _ in tasks]
+        task_objects = [task for _, task in tasks]
+
+        results_or_exceptions = await asyncio.gather(*task_objects, return_exceptions=True)
+
+        # Step 4: Separate successful results from exceptions
+        successful_results: dict[str, MethodResult] = {}
+        failed_methods: list[str] = []
+
+        for method_name, result in zip(method_names, results_or_exceptions):
+            if isinstance(result, Exception):
+                logger.warning(f"Method '{method_name}' failed: {result}")
+                failed_methods.append(method_name)
+            elif isinstance(result, MethodResult):
+                successful_results[method_name] = result
+                logger.info(
+                    f"Method '{method_name}' succeeded: {len(result.memories)} memories"
+                )
+            else:
+                # Unexpected result type
+                logger.error(f"Method '{method_name}' returned unexpected type: {type(result)}")
+                failed_methods.append(method_name)
+
+        # Step 5: Check if all methods failed
+        if not successful_results:
+            raise RuntimeError(
+                f"All enabled retrieval methods failed: {', '.join(failed_methods)}"
+            )
+
+        # Step 6: Log warnings for failed methods (non-fatal)
+        if failed_methods:
+            logger.warning(
+                f"Some retrieval methods failed ({len(failed_methods)}/{len(method_names)}): "
+                f"{', '.join(failed_methods)}. Continuing with successful methods."
+            )
+
+        # Step 7: Build memory lookup map (memory_id -> RetrievedMemory)
+        memory_lookup: dict[str, Any] = {}  # RetrievedMemory objects
+        for method_result in successful_results.values():
+            for memory in method_result.memories:
+                if memory.memory_id not in memory_lookup:
+                    memory_lookup[memory.memory_id] = memory
+
+        # Step 8: Merge results using RRF
+        rrf_scores = self.rrf_merger.merge(
+            method_results=list(successful_results.values()),
+            k=request.rrf_k,
+        )
+
+        logger.debug(f"RRF merging produced {len(rrf_scores)} unique memories")
+
+        # Step 9: Convert RRFScore to RetrievalResult
+        retrieval_results = self._build_retrieval_results(rrf_scores, memory_lookup)
+
+        # Step 9: Limit to top_k
+        retrieval_results = retrieval_results[: request.top_k]
+
+        total_latency_ms = (time.time() - start_time) * 1000
+
+        logger.info(
+            f"Hybrid retrieval complete: {len(retrieval_results)} results, "
+            f"{total_latency_ms:.1f}ms total, "
+            f"methods used: {list(successful_results.keys())}"
+        )
+
+        return retrieval_results
+
+    async def _vector_search(
+        self,
+        query_embedding: list[float],
+        top_k: int,
+    ) -> MethodResult:
+        """Execute vector search using Neo4j vector index.
+
+        Args:
+            query_embedding: Query embedding vector
+            top_k: Number of results to return
+
+        Returns:
+            MethodResult with ranked memories
+
+        Raises:
+            Exception: If vector search fails
+        """
+        start_time = time.time()
+        logger.debug(f"Executing vector search (top_k={top_k})")
+
+        try:
+            # Delegate to Neo4j vector similarity search
+            raw_memories = await self.neo4j.search_similar_memories(
+                query_vector=query_embedding,
+                top_k=top_k,
+                min_confidence=0.4,  # Use default from config
+                min_similarity=0.65,  # Use default from config
+            )
+
+            # Convert to RetrievedMemory format expected by MethodResult
+            from src.haia.models.hybrid_retrieval import RetrievedMemory
+            memories = []
+            for mem_data in raw_memories:
+                memory = self._dict_to_memory(mem_data)
+                # Create RetrievedMemory wrapper
+                retrieved_mem = RetrievedMemory(
+                    memory_id=memory.memory_id,
+                    content=memory.content,
+                    type=memory.memory_type,
+                    confidence=memory.confidence,
+                    valid_from=memory.extraction_timestamp or datetime.now(timezone.utc),
+                    valid_until=None,
+                )
+                memories.append(retrieved_mem)
+
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.info(f"Vector search completed in {elapsed_ms:.2f}ms ({len(memories)} results)")
+
+            return MethodResult(
+                method="vector",
+                memories=memories,
+            )
+
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(f"Vector search failed after {elapsed_ms:.2f}ms: {e}", exc_info=True)
+            raise
+
+    async def _bm25_search(
+        self,
+        query_text: str,
+        top_k: int,
+    ) -> MethodResult:
+        """Execute BM25 fulltext search using Neo4j fulltext index.
+
+        Args:
+            query_text: Query text for BM25 matching
+            top_k: Number of results to return
+
+        Returns:
+            MethodResult with ranked memories
+
+        Raises:
+            Exception: If BM25 search fails (e.g., index not available)
+        """
+        start_time = time.time()
+        logger.debug(f"Executing BM25 search (top_k={top_k})")
+
+        try:
+            # Use Neo4j BM25 search (from Session 10)
+            raw_memories = await self.neo4j.search_memories_bm25(
+                query=query_text,
+                top_k=top_k,
+            )
+
+            # Convert to RetrievedMemory format
+            from src.haia.models.hybrid_retrieval import RetrievedMemory
+            memories = []
+            for mem_data in raw_memories:
+                memory = self._dict_to_memory(mem_data)
+                # Create RetrievedMemory wrapper
+                retrieved_mem = RetrievedMemory(
+                    memory_id=memory.memory_id,
+                    content=memory.content,
+                    type=memory.memory_type,
+                    confidence=memory.confidence,
+                    valid_from=memory.extraction_timestamp or datetime.now(timezone.utc),
+                    valid_until=None,
+                )
+                memories.append(retrieved_mem)
+
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.info(f"BM25 search completed in {elapsed_ms:.2f}ms ({len(memories)} results)")
+
+            return MethodResult(
+                method="bm25",
+                memories=memories,
+            )
+
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(f"BM25 search failed after {elapsed_ms:.2f}ms: {e}", exc_info=True)
+            raise
+
+    async def _graph_traversal_search(
+        self,
+        query_embedding: list[float],
+        depth: int,
+        top_k: int,
+    ) -> MethodResult:
+        """Execute graph traversal search from vector seed memories.
+
+        Strategy:
+            1. Get top-3 seed memories from vector search
+            2. Traverse graph from seeds using GraphTraversalService
+            3. Fetch full memory objects from Neo4j
+            4. Return ranked by distance from seeds
+
+        Args:
+            query_embedding: Query embedding for getting seeds
+            depth: Maximum graph traversal depth (1-3 hops)
+            top_k: Number of results to return
+
+        Returns:
+            MethodResult with memories found via graph traversal
+
+        Raises:
+            Exception: If graph traversal fails
+        """
+        start_time = time.time()
+        logger.debug(f"Executing graph traversal search (depth={depth}, top_k={top_k})")
+
+        try:
+            # Step 1: Get seed memories from vector search (top 3)
+            seed_memories = await self.neo4j.search_similar_memories(
+                query_vector=query_embedding,
+                top_k=3,  # Fixed: use top-3 as seeds
+                min_confidence=0.4,
+                min_similarity=0.65,
+            )
+
+            if not seed_memories:
+                logger.warning("No seed memories found for graph traversal")
+                return MethodResult(method="graph", memories=[])
+
+            seed_ids = [mem["memory_id"] for mem in seed_memories]
+            logger.debug(f"Using {len(seed_ids)} seed memories for graph traversal")
+
+            # Step 2: Traverse graph from seeds
+            config = GraphTraversalConfig(
+                max_depth=depth,
+                relationship_types=["RELATED_TO", "DEPENDS_ON", "SUPERSEDES"],
+            )
+
+            traversed_results = await self.graph_traversal.traverse_from_seeds(
+                seed_memory_ids=seed_ids,
+                config=config,
+            )
+
+            if not traversed_results:
+                logger.debug("Graph traversal found no related memories")
+                return MethodResult(method="graph", memories=[])
+
+            # Step 3: Fetch full memory objects
+            # traversed_results contain basic info, we need full ExtractedMemory objects
+            from src.haia.models.hybrid_retrieval import RetrievedMemory
+            memories = []
+            for traversed_mem in traversed_results:
+                memory_id = traversed_mem["memory_id"]
+
+                # Create RetrievedMemory from traversed data
+                retrieved_mem = RetrievedMemory(
+                    memory_id=memory_id,
+                    content=traversed_mem.get("content", ""),
+                    type=traversed_mem.get("type", "technical_context"),
+                    confidence=traversed_mem.get("confidence", 0.5),
+                    valid_from=datetime.now(timezone.utc),
+                    valid_until=None,
+                )
+
+                memories.append(retrieved_mem)
+
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.info(f"Graph traversal completed in {elapsed_ms:.2f}ms ({len(memories[:top_k])} results, depth={depth})")
+
+            return MethodResult(
+                method="graph",
+                memories=memories[: top_k],  # Limit to top_k
+            )
+
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(f"Graph traversal search failed after {elapsed_ms:.2f}ms: {e}", exc_info=True)
+            raise
+
+    def _build_retrieval_results(
+        self,
+        rrf_scores: list[Any],  # RRFScore objects
+        memory_lookup: dict[str, Any],  # memory_id -> RetrievedMemory mapping
+    ) -> list[RetrievalResult]:
+        """Convert RRFScore objects to RetrievalResult objects.
+
+        Args:
+            rrf_scores: List of RRFScore objects from RRF merger
+            memory_lookup: Mapping from memory_id to RetrievedMemory objects
+
+        Returns:
+            List of RetrievalResult objects with source attribution
+        """
+        from src.haia.models.hybrid_retrieval import RetrievedMemory
+
+        results = []
+
+        for rank, rrf_score in enumerate(rrf_scores, start=1):
+            # Look up the full memory object
+            retrieved_memory = memory_lookup.get(rrf_score.memory_id)
+            if not retrieved_memory:
+                logger.warning(f"Memory {rrf_score.memory_id} not found in lookup map")
+                continue
+
+            # Convert RetrievedMemory to ExtractedMemory for RetrievalResult
+            # This is needed because RetrievalResult expects ExtractedMemory
+            extracted_memory = ExtractedMemory(
+                memory_id=retrieved_memory.memory_id,
+                memory_type=retrieved_memory.type,
+                content=retrieved_memory.content,
+                confidence=retrieved_memory.confidence,
+                source_conversation_id="hybrid",  # Special marker for hybrid retrieval
+                extraction_timestamp=retrieved_memory.valid_from,
+                has_embedding=True,
+            )
+
+            # Extract source methods from method_contributions
+            source_methods = list(rrf_score.method_contributions.keys())
+
+            # Create RetrievalResult
+            result = RetrievalResult(
+                memory=extracted_memory,
+                similarity_score=rrf_score.rrf_score,  # Use RRF score as similarity
+                relevance_score=rrf_score.rrf_score,  # Same as RRF score for now
+                rank=rank,
+                was_deduplicated=False,  # Not yet deduplicated at this stage
+                access_metadata=None,  # Will be populated later if access tracking enabled
+            )
+
+            # Store source attribution in memory metadata for now
+            # TODO: Add source_methods field to RetrievalResult model (Session 13+)
+            extracted_memory.metadata["source_methods"] = source_methods
+            extracted_memory.metadata["rrf_score"] = rrf_score.rrf_score
+            extracted_memory.metadata["method_contributions"] = rrf_score.method_contributions
+
+            results.append(result)
+
+        return results
 
     async def health_check(self) -> bool:
         """Check if retrieval service is operational.
