@@ -54,6 +54,7 @@ class RetrievalService:
         type_weights: dict[str, float] | None = None,
         recency_decay_days: float = 43.3,
         dedup_similarity_threshold: float = 0.92,
+        type_clusterer: "TypeClusterer | None" = None,
     ):
         """Initialize retrieval service.
 
@@ -66,6 +67,7 @@ class RetrievalService:
             type_weights: Weight multipliers by memory type (δ) - defaults to 1.0 for all
             recency_decay_days: Days for recency to decay to ~0.5 (default 43.3)
             dedup_similarity_threshold: Cosine similarity threshold for deduplication (default 0.92)
+            type_clusterer: Optional TypeClusterer for semantic type expansion (Session 14, US5)
         """
         self.neo4j = neo4j_service
         self.ollama = ollama_client
@@ -94,10 +96,13 @@ class RetrievalService:
         self.graph_traversal = GraphTraversalService(neo4j_service=neo4j_service)
         self.rrf_merger = RRFMerger()
 
+        # Initialize type expansion (Session 14, US5)
+        self.type_clusterer = type_clusterer
+
         logger.info(
             f"RetrievalService initialized (α={similarity_weight}, β={confidence_weight}, "
             f"γ={recency_weight}, dedup_threshold={dedup_similarity_threshold}, "
-            f"type_weights={self.type_weights})"
+            f"type_expansion={'enabled' if type_clusterer else 'disabled'})"
         )
 
     async def retrieve(
@@ -138,6 +143,9 @@ class RetrievalService:
             embedding_latency_ms = (time.time() - embedding_start) * 1000
             logger.debug(f"Generated query embedding ({embedding_latency_ms:.1f}ms)")
 
+        # Step 1.5: Expand memory types using semantic neighbors (Session 14, US5, T087)
+        expanded_types = await self._expand_memory_types(query.memory_types)
+
         # Step 2: Search similar memories via Neo4j vector index
         search_start = time.time()
         raw_memories = await self.neo4j.search_similar_memories(
@@ -145,7 +153,8 @@ class RetrievalService:
             top_k=query.top_k,
             min_confidence=query.min_confidence,
             min_similarity=query.min_similarity,
-            memory_types=query.memory_types,
+            memory_types=expanded_types,  # Use expanded types instead of query.memory_types
+            valid_at=query.valid_at,  # Temporal filtering (Session 14, US5, T088)
         )
         search_latency_ms = (time.time() - search_start) * 1000
 
@@ -492,6 +501,66 @@ class RetrievalService:
         similarity = len(intersection) / len(union) if union else 0.0
 
         return similarity >= threshold
+
+    async def _expand_memory_types(
+        self, memory_types: list[str] | None
+    ) -> list[str] | None:
+        """
+        Expand memory types to include semantic neighbors (Session 14, US5, T087).
+
+        Uses TypeClusterer to find semantically similar types and expand the query.
+        Example: "docker_preference" → also retrieves "container_preference", "orchestration_preference"
+
+        Args:
+            memory_types: Original memory types from query (None = no filtering)
+
+        Returns:
+            Expanded list of memory types, or None if no filtering
+        """
+        # If no type clustering configured, return original types
+        if self.type_clusterer is None:
+            return memory_types
+
+        # If no types specified, don't filter
+        if not memory_types:
+            return None
+
+        # Expand each type with its semantic neighbors
+        expanded_set = set(memory_types)  # Start with original types
+
+        for memory_type in memory_types:
+            try:
+                neighbors = await self.type_clusterer.find_semantic_neighbors(
+                    memory_type=memory_type,
+                    threshold=0.80,  # High threshold for type expansion
+                    max_neighbors=5,  # Top 5 neighbors per type
+                )
+
+                # Add neighbor type names to expanded set
+                for neighbor in neighbors:
+                    expanded_set.add(neighbor.type_name)
+
+                if neighbors:
+                    neighbor_names = [n.type_name for n in neighbors]
+                    logger.debug(
+                        f"Type expansion: '{memory_type}' → +{len(neighbors)} neighbors: "
+                        f"{neighbor_names}"
+                    )
+
+            except Exception as e:
+                logger.warning(f"Failed to expand type '{memory_type}': {e}")
+                # Continue with original type if expansion fails
+                continue
+
+        expanded_list = list(expanded_set)
+
+        if len(expanded_list) > len(memory_types):
+            logger.info(
+                f"Type expansion: {len(memory_types)} types → {len(expanded_list)} types "
+                f"({len(expanded_list) - len(memory_types)} semantic neighbors added)"
+            )
+
+        return expanded_list
 
     def _dict_to_memory(self, data: dict) -> ExtractedMemory:
         """Convert Neo4j result dictionary to ExtractedMemory.

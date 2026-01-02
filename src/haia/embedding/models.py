@@ -162,6 +162,11 @@ class RetrievalQuery(BaseModel):
     exclude_ids: list[str] | None = Field(
         None, description="Exclude specific memory IDs"
     )
+    valid_at: datetime | None = Field(
+        None,
+        description="Query memories valid at specific time (Session 14, US5, T088). "
+                    "Filters by: valid_from <= valid_at AND (valid_until IS NULL OR valid_until > valid_at)"
+    )
 
     include_metadata: bool = Field(
         default=True, description="Include retrieval metadata in results"
