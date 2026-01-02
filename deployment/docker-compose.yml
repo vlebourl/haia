@@ -93,18 +93,18 @@ services:
     volumes:
       - open-webui-data:/app/backend/data
     environment:
-      # Connect to HAIA API
-      OPENAI_API_BASE_URL: http://haia:8000/v1
-      OPENAI_API_KEY: "not-needed-for-local-haia"
-
       # WebUI Configuration
       WEBUI_NAME: "HAIA - Homelab AI Assistant"
       ENABLE_SIGNUP: ${WEBUI_ENABLE_SIGNUP:-true}
       DEFAULT_USER_ROLE: ${WEBUI_DEFAULT_USER_ROLE:-user}
 
-      # Disable external connections (HAIA only)
+      # Disable Ollama (HAIA only)
       ENABLE_OLLAMA_API: "false"
-      ENABLE_OPENAI_API: "false"
+
+      # Enable OpenAI-compatible API for HAIA
+      ENABLE_OPENAI_API: "true"
+      OPENAI_API_BASE_URLS: "http://haia:8000/v1"
+      OPENAI_API_KEYS: "sk-haia-local"
     depends_on:
       haia:
         condition: service_healthy
