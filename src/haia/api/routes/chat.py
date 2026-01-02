@@ -111,6 +111,64 @@ def format_memories_natural_language(retrieval_response) -> str:
     return "\n".join(lines)
 
 
+def format_hybrid_memories_natural_language(retrieval_results: list) -> str:
+    """Format hybrid retrieval results as natural language context for LLM.
+
+    Includes source attribution showing which methods (vector, BM25, graph) found each memory.
+
+    Args:
+        retrieval_results: List of RetrievalResult from retrieve_hybrid()
+
+    Returns:
+        Formatted memory context string with source attribution
+    """
+    if not retrieval_results:
+        return ""
+
+    lines = ["# Relevant Context from Past Conversations (Hybrid Retrieval)\n"]
+    lines.append(
+        "The following information was learned from previous interactions, "
+        "found using semantic search, keyword matching, and relationship traversal. "
+        "Use this context to provide personalized, informed responses.\n"
+    )
+
+    for result in retrieval_results:
+        memory = result.memory
+        memory_type_label = memory.memory_type.replace("_", " ").title()
+
+        # Format based on memory type for natural reading
+        if memory.memory_type == "preference":
+            lines.append(f"- **Preference**: {memory.content}")
+        elif memory.memory_type == "technical_context":
+            lines.append(f"- **Technical Context**: {memory.content}")
+        elif memory.memory_type == "decision":
+            lines.append(f"- **Past Decision**: {memory.content}")
+        elif memory.memory_type == "personal_fact":
+            lines.append(f"- **Personal Fact**: {memory.content}")
+        elif memory.memory_type == "correction":
+            lines.append(f"- **Correction**: {memory.content}")
+        else:
+            lines.append(f"- **{memory_type_label}**: {memory.content}")
+
+        # Add confidence indicator for medium-confidence memories
+        if memory.confidence < 0.7:
+            lines.append(f"  *(Confidence: {memory.confidence:.0%})*")
+
+        # T049: Add source attribution (which methods found this memory)
+        if memory.metadata and "source_methods" in memory.metadata:
+            source_methods = memory.metadata["source_methods"]
+            if isinstance(source_methods, list) and source_methods:
+                methods_str = ", ".join(source_methods)
+                lines.append(f"  *(Found by: {methods_str})*")
+
+    lines.append(
+        "\n**Note**: Use this context naturally. Don't explicitly mention "
+        "that you're using past conversation memory unless directly relevant.\n"
+    )
+
+    return "\n".join(lines)
+
+
 async def stream_chat_response(
     request: ChatCompletionRequest,
     agent: Agent,
@@ -286,31 +344,59 @@ async def chat_completions(
             exc_info=True,
         )
 
-    # Retrieve relevant memories (Session 8 - Memory Retrieval)
+    # Retrieve relevant memories (Session 8 - Memory Retrieval, Session 13 - Hybrid Retrieval)
     # Graceful degradation: If retrieval unavailable or fails, continue without memories
     memory_context = ""
     if retrieval_service is not None and len(request.messages) > 0:
         try:
             # Use last user message as retrieval query
             user_message = request.messages[-1].content
-            query = RetrievalQuery(
-                query_text=user_message,
-                top_k=5,  # Conservative limit to avoid context overflow
-                min_similarity=0.65,
-                min_confidence=0.4,
-            )
 
-            retrieval_response = await retrieval_service.retrieve(query)
+            # T048: Check for hybrid_mode in request metadata
+            hybrid_mode = request.metadata.get("hybrid_mode", False) if request.metadata else False
 
-            if retrieval_response.has_results:
-                memory_context = format_memories_natural_language(retrieval_response)
-                logger.info(
-                    f"[{correlation_id}] Retrieved {retrieval_response.total_results} memories "
-                    f"(latency: {retrieval_response.total_latency_ms:.1f}ms, "
-                    f"top relevance: {retrieval_response.results[0].relevance_score:.3f})"
+            if hybrid_mode:
+                # T047: Use hybrid retrieval (vector + BM25 + graph)
+                from haia.models.hybrid_retrieval import HybridRetrievalRequest
+
+                hybrid_request = HybridRetrievalRequest(
+                    query=user_message,
+                    enabled_methods=["vector", "bm25", "graph"],
+                    top_k=5,  # Conservative limit to avoid context overflow
+                    graph_depth=2,
                 )
+
+                retrieval_results = await retrieval_service.retrieve_hybrid(hybrid_request)
+
+                if retrieval_results:
+                    # Format hybrid results for context
+                    memory_context = format_hybrid_memories_natural_language(retrieval_results)
+                    logger.info(
+                        f"[{correlation_id}] Retrieved {len(retrieval_results)} memories via hybrid "
+                        f"(top score: {retrieval_results[0].relevance_score:.3f})"
+                    )
+                else:
+                    logger.debug(f"[{correlation_id}] No relevant memories found (hybrid mode)")
             else:
-                logger.debug(f"[{correlation_id}] No relevant memories found")
+                # Vector-only retrieval (backward compatible)
+                query = RetrievalQuery(
+                    query_text=user_message,
+                    top_k=5,  # Conservative limit to avoid context overflow
+                    min_similarity=0.65,
+                    min_confidence=0.4,
+                )
+
+                retrieval_response = await retrieval_service.retrieve(query)
+
+                if retrieval_response.has_results:
+                    memory_context = format_memories_natural_language(retrieval_response)
+                    logger.info(
+                        f"[{correlation_id}] Retrieved {retrieval_response.total_results} memories "
+                        f"(latency: {retrieval_response.total_latency_ms:.1f}ms, "
+                        f"top relevance: {retrieval_response.results[0].relevance_score:.3f})"
+                    )
+                else:
+                    logger.debug(f"[{correlation_id}] No relevant memories found")
 
         except Exception as e:
             # Log error but continue without memories (graceful degradation)
@@ -432,9 +518,20 @@ async def health_check(
 
     # Check retrieval service status (Session 8)
     retrieval_status = "disabled"
+    hybrid_retrieval_status = "disabled"
+    apoc_available = False
+
     if retrieval_service:
         retrieval_healthy = await retrieval_service.health_check()
         retrieval_status = "healthy" if retrieval_healthy else "degraded"
+
+        # T050: Check hybrid retrieval availability (Session 13)
+        if retrieval_healthy and hasattr(retrieval_service, "retrieve_hybrid"):
+            hybrid_retrieval_status = "enabled"
+
+            # Check APOC availability for graph traversal
+            if hasattr(retrieval_service, "graph_traversal") and retrieval_service.graph_traversal:
+                apoc_available = await neo4j_service.detect_apoc()
 
     # Determine overall status
     if neo4j_healthy and (retrieval_status in ["healthy", "disabled"]):
@@ -450,9 +547,11 @@ async def health_check(
             "memory_retrieval": retrieval_status,  # Session 8
             "multi_factor_scoring": retrieval_status,  # Session 8 US3
             "context_optimization": "enabled",  # Session 9
+            "hybrid_retrieval": hybrid_retrieval_status,  # Session 13
         },
         "services": {
             "neo4j": "connected" if neo4j_healthy else "disconnected",
             "ollama_embedding": retrieval_status,
+            "apoc_available": apoc_available,  # Session 13 - APOC plugin for graph traversal
         },
     }

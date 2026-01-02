@@ -55,6 +55,9 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = Field(False, description="Enable SSE streaming responses")
     temperature: float | None = Field(None, ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: int | None = Field(None, ge=1, description="Maximum tokens to generate")
+    metadata: dict[str, bool | str | int | float] | None = Field(
+        None, description="Optional metadata (e.g., hybrid_mode: true)"
+    )
 
     @field_validator("messages")
     @classmethod
