@@ -82,6 +82,39 @@ services:
       retries: 5
       start_period: 40s
 
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: haia-webui
+    restart: unless-stopped
+    ports:
+      - "${WEBUI_PORT:-3000}:8080"
+    networks:
+      - haia-network
+    volumes:
+      - open-webui-data:/app/backend/data
+    environment:
+      # Connect to HAIA API
+      OPENAI_API_BASE_URL: http://haia:8000/v1
+      OPENAI_API_KEY: "not-needed-for-local-haia"
+
+      # WebUI Configuration
+      WEBUI_NAME: "HAIA - Homelab AI Assistant"
+      ENABLE_SIGNUP: ${WEBUI_ENABLE_SIGNUP:-true}
+      DEFAULT_USER_ROLE: ${WEBUI_DEFAULT_USER_ROLE:-user}
+
+      # Disable external connections (HAIA only)
+      ENABLE_OLLAMA_API: "false"
+      ENABLE_OPENAI_API: "false"
+    depends_on:
+      haia:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
 networks:
   haia-network:
     driver: bridge
@@ -96,3 +129,5 @@ volumes:
     name: haia_neo4j-backups
   haia-logs:
     name: haia_haia-logs
+  open-webui-data:
+    name: haia_open-webui-data
