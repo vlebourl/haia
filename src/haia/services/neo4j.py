@@ -626,6 +626,7 @@ class Neo4jService:
         min_confidence: float = 0.4,
         min_similarity: float = 0.65,
         memory_types: Optional[list[str]] = None,
+        valid_at: Optional[Any] = None,
     ) -> list[dict[str, Any]]:
         """Search for similar memories using vector similarity.
 
@@ -635,6 +636,7 @@ class Neo4jService:
             min_confidence: Minimum extraction confidence threshold
             min_similarity: Minimum cosine similarity threshold
             memory_types: Optional filter by memory types
+            valid_at: Optional timestamp - only return memories valid at this time (Session 14, US5, T088)
 
         Returns:
             List of memory dictionaries with similarity scores
@@ -657,6 +659,13 @@ class Neo4jService:
         if memory_types:
             query += " AND memory.memory_type IN $memory_types"
 
+        # Add temporal filter if specified (Session 14, US5, T088)
+        if valid_at is not None:
+            query += """
+          AND memory.valid_from <= $valid_at
+          AND (memory.valid_until IS NULL OR memory.valid_until > $valid_at)
+        """
+
         query += """
         RETURN
           memory.memory_id AS memory_id,
@@ -678,15 +687,20 @@ class Neo4jService:
 
         try:
             async with self.driver.session() as session:
-                result = await session.run(
-                    query,
-                    search_k=search_k,
-                    query_vector=query_vector,
-                    min_confidence=min_confidence,
-                    min_similarity=min_similarity,
-                    memory_types=memory_types,
-                    top_k=top_k,
-                )
+                params = {
+                    "search_k": search_k,
+                    "query_vector": query_vector,
+                    "min_confidence": min_confidence,
+                    "min_similarity": min_similarity,
+                    "memory_types": memory_types,
+                    "top_k": top_k,
+                }
+
+                # Add valid_at parameter if temporal filtering requested
+                if valid_at is not None:
+                    params["valid_at"] = valid_at
+
+                result = await session.run(query, **params)
                 records = [record.data() async for record in result]
                 logger.debug(f"Found {len(records)} similar memories (top_k={top_k})")
                 return records
