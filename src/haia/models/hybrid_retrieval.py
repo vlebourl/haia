@@ -6,6 +6,7 @@ and graph traversal using Reciprocal Rank Fusion.
 """
 
 from datetime import datetime
+
 from pydantic import BaseModel, Field, field_validator
 
 

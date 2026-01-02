@@ -239,6 +239,8 @@ All configuration managed through `pydantic-settings` with environment variables
 - Neo4j 5.11+ with vector index support (existing from Session 6-7) (008-memory-retrieval)
 - Python 3.11+ (existing project standard) + PydanticAI 1.25.1+, httpx (async HTTP), neo4j (async driver), tiktoken (token counting) (009-context-optimization)
 - Neo4j 5.15+ graph database with vector index (existing from Session 6-8) (009-context-optimization)
+- Python 3.11+ + neo4j (async driver with APOC support), asyncio (parallel execution) (011-hybrid-retrieval)
+- Neo4j 5.15+ with vector index, BM25 fulltext index, and graph relationships (011-hybrid-retrieval)
 
 ### Memory System (006-docker-neo4j-stack)
 - **Neo4j 5.15 Graph Database** with async Python driver (`neo4j` package)
@@ -297,12 +299,51 @@ All configuration managed through `pydantic-settings` with environment variables
   - track_access=True (default)
   - token_budget=None (optional, disabled by default)
 
+### Hybrid Retrieval System (011-hybrid-retrieval)
+- **GraphTraversalService** (`src/haia/services/graph_traversal.py`)
+  - Discovers contextually relevant memories by following graph relationships
+  - Supports APOC multi-hop traversal (2-3 hops) with automatic fallback to native 1-hop Cypher
+  - Follows RELATED_TO, DEPENDS_ON, SUPERSEDES relationships
+  - Excludes seed nodes from results, returns distance-ranked memories
+
+- **RRFMerger** (`src/haia/services/rrf_merger.py`)
+  - Combines ranked results from multiple retrieval methods using Reciprocal Rank Fusion
+  - Formula: `score(d) = Σ (1 / (k + rank_i(d)))` where k=60
+  - Tracks source attribution (which methods found each memory)
+  - Industry-standard algorithm (Elasticsearch, Milvus, Azure AI Search)
+
+- **Hybrid Retrieval** (`RetrievalService.retrieve_hybrid()`)
+  - Executes 3 retrieval methods in parallel: vector (semantic), BM25 (keyword), graph (relationships)
+  - Graceful degradation: Continues if individual methods fail (raises error only if ALL fail)
+  - Returns merged results with RRF scores and source attribution
+  - Performance: p95 latency <500ms with all methods enabled
+
+- **API Integration** (`src/haia/api/routes/chat.py`)
+  - Chat API supports `metadata: {"hybrid_mode": true}` parameter
+  - Automatic method selection: hybrid retrieval when enabled, vector-only when disabled
+  - Memory context includes source attribution: `*(Found by: vector, bm25, graph)*`
+  - Health endpoint reports `hybrid_retrieval: enabled/disabled` and `apoc_available: true/false`
+
+- **Configuration** (`.env`)
+  - `HYBRID_RETRIEVAL_ENABLED=true` - Global enable/disable
+  - `HYBRID_DEFAULT_METHODS=vector,bm25,graph` - Default methods to use
+  - `HYBRID_GRAPH_MAX_DEPTH=2` - Max graph traversal hops (1-3)
+  - `HYBRID_RRF_K=60` - RRF constant parameter
+  - `HYBRID_ENABLE_APOC=true` - Use APOC plugin when available
+
+- **Usage Example**:
+  ```bash
+  curl -X POST /v1/chat/completions \
+    -d '{"messages": [...], "metadata": {"hybrid_mode": true}}'
+  ```
+
 ### Previous Features
 - N/A (stateless client, no persistence in this layer) (001-llm-abstraction)
 - Stateless API design - client manages conversation history (003-openai-chat-api)
 - Versatile companion system prompt - homelab as one capability among many (004-system-prompt-redesign)
 
 ## Recent Changes
+- 011-hybrid-retrieval: Added hybrid retrieval system (vector + BM25 + graph) with RRF merging (Session 13)
 - 009-context-optimization: Added Deduplicator, Ranker, BudgetManager, AccessTracker (Session 9)
 - 008-memory-retrieval: Added RetrievalService with semantic search (Session 8)
 - 007-memory-extraction: Added memory extraction pipeline (Session 7)

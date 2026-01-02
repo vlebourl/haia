@@ -7,8 +7,8 @@ including relevance scoring, ranking, deduplication, and hybrid retrieval.
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from haia.context.access_tracker import AccessTracker
 from haia.context.budget_manager import BudgetManager
@@ -19,18 +19,17 @@ from haia.embedding.models import (
     RetrievalQuery,
     RetrievalResponse,
     RetrievalResult,
-    RelevanceScore,
 )
 from haia.embedding.ollama_client import OllamaClient
 from haia.extraction.models import ExtractedMemory
 from haia.services.neo4j import Neo4jService
-from src.haia.services.graph_traversal import GraphTraversalService
-from src.haia.services.rrf_merger import RRFMerger
 from src.haia.models.hybrid_retrieval import (
+    GraphTraversalConfig,
     HybridRetrievalRequest,
     MethodResult,
-    GraphTraversalConfig,
 )
+from src.haia.services.graph_traversal import GraphTraversalService
+from src.haia.services.rrf_merger import RRFMerger
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +106,7 @@ class RetrievalService:
         enable_dedup: bool = True,
         enable_rerank: bool = True,
         track_access: bool = True,
-        token_budget: Optional[int] = None,
+        token_budget: int | None = None,
         truncation_strategy: TruncationStrategy = TruncationStrategy.HARD_CUTOFF,
     ) -> RetrievalResponse:
         """Retrieve relevant memories for a query.
@@ -219,7 +218,9 @@ class RetrievalService:
             try:
                 retrieval_results = self.ranker.rerank(retrieval_results)
                 rerank_latency_ms = (time.time() - rerank_start) * 1000
-                logger.debug(f"Re-ranked {len(retrieval_results)} memories ({rerank_latency_ms:.1f}ms)")
+                logger.debug(
+                    f"Re-ranked {len(retrieval_results)} memories ({rerank_latency_ms:.1f}ms)"
+                )
             except Exception as e:
                 logger.warning(f"Re-ranking failed, using original order: {e}")
                 # Fallback to simple relevance sorting
@@ -369,11 +370,11 @@ class RetrievalService:
             return 0.5
 
         # Calculate days since extraction
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Ensure extraction_timestamp is timezone-aware
         if extraction_timestamp.tzinfo is None:
-            extraction_timestamp = extraction_timestamp.replace(tzinfo=timezone.utc)
+            extraction_timestamp = extraction_timestamp.replace(tzinfo=UTC)
 
         days_ago = (now - extraction_timestamp).total_seconds() / 86400.0
 
@@ -425,7 +426,6 @@ class RetrievalService:
 
         for mem, sim, rel in memories:
             is_duplicate = False
-            duplicate_index = -1
 
             for idx, (existing_mem, existing_sim, existing_rel) in enumerate(deduplicated):
                 # Check if content is very similar
@@ -433,19 +433,20 @@ class RetrievalService:
                     mem.content, existing_mem.content, similarity_threshold
                 ):
                     is_duplicate = True
-                    duplicate_index = idx
                     # If new memory has higher confidence, replace existing
                     if mem.confidence > existing_mem.confidence:
                         deduplicated[idx] = (mem, sim, rel)
                         logger.debug(
                             f"Replaced duplicate {existing_mem.memory_id} with {mem.memory_id} "
-                            f"(higher confidence: {mem.confidence:.3f} > {existing_mem.confidence:.3f})"
+                            f"(higher confidence: {mem.confidence:.3f} > "
+                            f"{existing_mem.confidence:.3f})"
                         )
                     else:
                         removed_count += 1
                         logger.debug(
                             f"Removed duplicate {mem.memory_id} "
-                            f"(lower confidence: {mem.confidence:.3f} <= {existing_mem.confidence:.3f})"
+                            f"(lower confidence: {mem.confidence:.3f} <= "
+                            f"{existing_mem.confidence:.3f})"
                         )
                     break
 
@@ -581,7 +582,7 @@ class RetrievalService:
         )
 
         # Step 1: Generate query embedding (needed for vector and graph)
-        query_embedding: Optional[list[float]] = None
+        query_embedding: list[float] | None = None
         if "vector" in request.enabled_methods or "graph" in request.enabled_methods:
             try:
                 query_embedding = await self.generate_embedding(request.query)
@@ -591,8 +592,8 @@ class RetrievalService:
                 # If embedding fails and vector/graph are the only methods, this is fatal
                 if request.enabled_methods.issubset({"vector", "graph"}):
                     raise RuntimeError(
-                        f"Cannot perform hybrid retrieval: embedding generation failed and "
-                        f"no other methods enabled"
+                        "Cannot perform hybrid retrieval: embedding generation failed and "
+                        "no other methods enabled"
                     ) from e
 
         # Step 2: Launch enabled methods in parallel
@@ -724,7 +725,7 @@ class RetrievalService:
                     content=memory.content,
                     type=memory.memory_type,
                     confidence=memory.confidence,
-                    valid_from=memory.extraction_timestamp or datetime.now(timezone.utc),
+                    valid_from=memory.extraction_timestamp or datetime.now(UTC),
                     valid_until=None,
                 )
                 memories.append(retrieved_mem)
@@ -780,7 +781,7 @@ class RetrievalService:
                     content=memory.content,
                     type=memory.memory_type,
                     confidence=memory.confidence,
-                    valid_from=memory.extraction_timestamp or datetime.now(timezone.utc),
+                    valid_from=memory.extraction_timestamp or datetime.now(UTC),
                     valid_until=None,
                 )
                 memories.append(retrieved_mem)
@@ -870,14 +871,17 @@ class RetrievalService:
                     content=traversed_mem.get("content", ""),
                     type=traversed_mem.get("type", "technical_context"),
                     confidence=traversed_mem.get("confidence", 0.5),
-                    valid_from=datetime.now(timezone.utc),
+                    valid_from=datetime.now(UTC),
                     valid_until=None,
                 )
 
                 memories.append(retrieved_mem)
 
             elapsed_ms = (time.time() - start_time) * 1000
-            logger.info(f"Graph traversal completed in {elapsed_ms:.2f}ms ({len(memories[:top_k])} results, depth={depth})")
+            logger.info(
+                f"Graph traversal completed in {elapsed_ms:.2f}ms "
+                f"({len(memories[:top_k])} results, depth={depth})"
+            )
 
             return MethodResult(
                 method="graph",
@@ -886,7 +890,9 @@ class RetrievalService:
 
         except Exception as e:
             elapsed_ms = (time.time() - start_time) * 1000
-            logger.error(f"Graph traversal search failed after {elapsed_ms:.2f}ms: {e}", exc_info=True)
+            logger.error(
+                f"Graph traversal search failed after {elapsed_ms:.2f}ms: {e}", exc_info=True
+            )
             raise
 
     def _build_retrieval_results(
@@ -903,7 +909,6 @@ class RetrievalService:
         Returns:
             List of RetrievalResult objects with source attribution
         """
-        from src.haia.models.hybrid_retrieval import RetrievedMemory
 
         results = []
 

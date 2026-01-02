@@ -7,9 +7,8 @@ Based on: Cormack et al. 2009 - "Reciprocal rank fusion outperforms Condorcet"
 """
 
 import logging
-from typing import Any
 
-from src.haia.models.hybrid_retrieval import MethodResult, RRFScore, RetrievedMemory
+from src.haia.models.hybrid_retrieval import MethodResult, RetrievedMemory, RRFScore
 
 logger = logging.getLogger(__name__)
 
