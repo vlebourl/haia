@@ -16,7 +16,11 @@ from haia.api.deps import (
     set_retrieval_service,
 )
 from haia.api.routes import chat
-from haia.config import settings
+from haia.config import (
+    relationship_inference_config,
+    settings,
+    type_clustering_config,
+)
 from haia.embedding.ollama_client import OllamaClient
 from haia.embedding.retrieval_service import RetrievalService
 from haia.extraction import ExtractionService
@@ -24,6 +28,8 @@ from haia.interfaces.scheduler import HAIAScheduler
 from haia.memory.tracker import ConversationTracker
 from haia.services.memory_storage import MemoryStorageService
 from haia.services.neo4j import Neo4jService
+from haia.services.relationship_inference import RelationshipInferenceService
+from haia.services.temporal_manager import TemporalManager
 
 # Configure logging - simpler format without correlation_id for startup logs
 logging.basicConfig(
@@ -120,9 +126,43 @@ async def lifespan(app: FastAPI):
         min_confidence=settings.extraction_min_confidence,
     )
 
+    # Initialize TemporalManager (Session 12 - User Story 4)
+    logger.info(
+        f"Initializing temporal conflict detection "
+        f"(threshold: {relationship_inference_config.temporal_conflict_threshold})"
+    )
+    temporal_manager = TemporalManager(
+        neo4j_service=neo4j_service,
+        similarity_threshold=relationship_inference_config.temporal_conflict_threshold,
+    )
+
+    # Initialize RelationshipInferenceService (Session 12 - User Story 4)
+    relationship_service = None
+    if relationship_inference_config.relationship_inference_enabled:
+        relationship_model = (
+            relationship_inference_config.relationship_model
+            or settings.extraction_model
+            or settings.haia_model
+        )
+        logger.info(
+            f"Initializing relationship inference service "
+            f"(model: {relationship_model}, min_confidence: {relationship_inference_config.relationship_min_confidence})"
+        )
+        relationship_service = RelationshipInferenceService(
+            neo4j_service=neo4j_service,
+            model=relationship_model,
+            min_confidence=relationship_inference_config.relationship_min_confidence,
+        )
+    else:
+        logger.info("Relationship inference disabled by configuration")
+
     # Initialize memory storage service
     logger.info("Initializing memory storage service")
-    memory_storage_service = MemoryStorageService(neo4j_service=neo4j_service)
+    memory_storage_service = MemoryStorageService(
+        neo4j_service=neo4j_service,
+        temporal_manager=temporal_manager,
+        relationship_service=relationship_service,
+    )
 
     # Initialize conversation tracker for boundary detection
     logger.info(
@@ -176,22 +216,22 @@ async def lifespan(app: FastAPI):
 
     # Initialize background scheduler (Session 11 - Type Clustering)
     scheduler = None
-    if settings.type_clustering_enabled:
+    if type_clustering_config.type_clustering_enabled:
         try:
             logger.info("Initializing HAIA scheduler for background tasks")
             scheduler = HAIAScheduler(
                 neo4j_service=neo4j_service,
                 extraction_model=settings.extraction_model or settings.haia_model,
-                type_clustering_enabled=settings.type_clustering_enabled,
-                type_clustering_schedule=settings.type_clustering_schedule,
-                min_cluster_size=settings.type_clustering_min_size,
-                similarity_threshold=settings.type_clustering_similarity_threshold,
-                embedding_provider=settings.type_embedding_provider,
-                google_api_key=settings.google_api_key if settings.type_embedding_provider == "google" else None,
-                google_embedding_model=settings.google_embedding_model,
+                type_clustering_enabled=type_clustering_config.type_clustering_enabled,
+                type_clustering_schedule=type_clustering_config.type_clustering_schedule,
+                min_cluster_size=type_clustering_config.type_clustering_min_size,
+                similarity_threshold=type_clustering_config.type_clustering_similarity_threshold,
+                embedding_provider=type_clustering_config.type_embedding_provider,
+                google_api_key=settings.google_api_key if type_clustering_config.type_embedding_provider == "google" else None,
+                google_embedding_model=type_clustering_config.google_embedding_model,
             )
             scheduler.start()
-            logger.info(f"HAIA scheduler started (type clustering: {settings.type_clustering_schedule})")
+            logger.info(f"HAIA scheduler started (type clustering: {type_clustering_config.type_clustering_schedule})")
         except Exception as e:
             logger.warning(
                 f"Failed to initialize scheduler: {e}. "

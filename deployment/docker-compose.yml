@@ -10,7 +10,8 @@ services:
     networks:
       - haia-network
     volumes:
-      - haia-logs:/app/logs
+      - ${DATA_DIR:-../data}/haia/logs:/app/logs
+      - ${DATA_DIR:-../data}/haia/transcripts:/app/data/transcripts
     environment:
       # LLM Configuration
       HAIA_MODEL: ${HAIA_MODEL}
@@ -58,9 +59,9 @@ services:
     networks:
       - haia-network
     volumes:
-      - neo4j-data:/data
-      - neo4j-logs:/logs
-      - neo4j-backups:/backups
+      - ${DATA_DIR:-../data}/neo4j/data:/data
+      - ${DATA_DIR:-../data}/neo4j/logs:/logs
+      - ${DATA_DIR:-../data}/neo4j/backups:/backups
     environment:
       # Authentication
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD}
@@ -82,17 +83,46 @@ services:
       retries: 5
       start_period: 40s
 
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: haia-webui
+    restart: unless-stopped
+    ports:
+      - "${WEBUI_PORT:-3000}:8080"
+    networks:
+      - haia-network
+    volumes:
+      - ${DATA_DIR:-../data}/open-webui:/app/backend/data
+    environment:
+      # WebUI Configuration
+      WEBUI_NAME: "HAIA - Homelab AI Assistant"
+      ENABLE_SIGNUP: ${WEBUI_ENABLE_SIGNUP:-true}
+      DEFAULT_USER_ROLE: ${WEBUI_DEFAULT_USER_ROLE:-user}
+
+      # Disable Ollama (HAIA only)
+      ENABLE_OLLAMA_API: "false"
+
+      # Enable OpenAI-compatible API for HAIA
+      ENABLE_OPENAI_API: "true"
+      OPENAI_API_BASE_URLS: "http://haia:8000/v1"
+      OPENAI_API_KEYS: "sk-haia-local"
+    depends_on:
+      haia:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
 networks:
   haia-network:
     driver: bridge
     name: haia-network
 
-volumes:
-  neo4j-data:
-    name: haia_neo4j-data
-  neo4j-logs:
-    name: haia_neo4j-logs
-  neo4j-backups:
-    name: haia_neo4j-backups
-  haia-logs:
-    name: haia_haia-logs
+# Volumes are now bind-mounted to ${DATA_DIR:-../data}/ for easy backup/migration
+# This allows you to:
+# 1. Backup: tar -czf haia-backup.tar.gz data/
+# 2. Migrate: Copy data/ directory to new server
+# 3. Access: All data in ./data/ directory (gitignored)

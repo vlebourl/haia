@@ -6,6 +6,8 @@ from typing import Optional
 
 from haia.extraction.models import ExtractedMemory, ExtractionResult
 from haia.services.neo4j import Neo4jService
+from haia.services.temporal_manager import TemporalManager
+from haia.services.relationship_inference import RelationshipInferenceService
 
 logger = logging.getLogger(__name__)
 
@@ -13,13 +15,22 @@ logger = logging.getLogger(__name__)
 class MemoryStorageService:
     """Service for storing extracted memories in Neo4j graph database."""
 
-    def __init__(self, neo4j_service: Neo4jService):
+    def __init__(
+        self,
+        neo4j_service: Neo4jService,
+        temporal_manager: Optional[TemporalManager] = None,
+        relationship_service: Optional[RelationshipInferenceService] = None,
+    ):
         """Initialize memory storage service.
 
         Args:
             neo4j_service: Neo4j service instance for database operations
+            temporal_manager: Optional TemporalManager for conflict detection/resolution
+            relationship_service: Optional RelationshipInferenceService for relationship discovery
         """
         self.neo4j = neo4j_service
+        self.temporal_manager = temporal_manager or TemporalManager(neo4j_service)
+        self.relationship_service = relationship_service
         logger.info("MemoryStorageService initialized")
 
     async def store_extraction_result(self, result: ExtractionResult) -> int:
@@ -58,16 +69,22 @@ class MemoryStorageService:
         stored_count = 0
         for memory in result.memories:
             try:
-                # Session 10: Check for contradictions before storing
-                contradicting_memory = await self.detect_contradiction(memory)
+                # Session 12: Use TemporalManager for conflict detection
+                conflict = await self.temporal_manager.detect_temporal_conflict(
+                    new_memory_id=memory.memory_id,
+                    new_content=memory.content,
+                    new_valid_from=memory.valid_from,
+                    new_embedding=getattr(memory, 'embedding', None),
+                )
 
-                if contradicting_memory:
-                    # Handle superseding: update old memory, create link
-                    await self.handle_superseding(
-                        new_memory=memory, old_memory_id=contradicting_memory["memory_id"]
+                if conflict:
+                    # Resolve temporal conflict
+                    await self.temporal_manager.resolve_conflict(
+                        conflict=conflict,
+                        new_valid_from=memory.valid_from,
                     )
                     logger.info(
-                        f"Memory {memory.memory_id} supersedes {contradicting_memory['memory_id']}"
+                        f"Memory {memory.memory_id} supersedes {conflict.existing_memory_id}"
                     )
 
                 # Store the new memory
@@ -255,149 +272,118 @@ class MemoryStorageService:
             )
             raise
 
-    # =========================================================================
-    # SESSION 10: TEMPORAL TRACKING (Phase 1 - User Story 1)
-    # =========================================================================
+    async def infer_relationships_batch(
+        self,
+        conversation_id: str,
+        max_pairs: int = 10,
+    ) -> int:
+        """Infer relationships between memories from a conversation.
 
-    async def detect_contradiction(
-        self, new_memory: ExtractedMemory, similarity_threshold: float = 0.75
-    ) -> Optional[dict]:
-        """Detect if new memory contradicts existing memories.
-
-        Finds semantically similar memories with temporal overlap and different content.
-        Used to identify memories that need to be superseded.
+        Uses RelationshipInferenceService to discover semantic relationships
+        between memories extracted from the same conversation.
 
         Args:
-            new_memory: New memory being stored
-            similarity_threshold: Cosine similarity threshold (default: 0.75)
+            conversation_id: Conversation ID to find memories from
+            max_pairs: Maximum number of memory pairs to analyze (default: 10)
 
         Returns:
-            Dict with old memory details if contradiction found, None otherwise
+            Number of relationships successfully stored
 
-        Example contradiction:
-            Old: "I have 3 Proxmox nodes" (valid_from: 2024-10-01)
-            New: "I have 4 Proxmox nodes" (valid_from: 2024-12-01)
-            -> Similar content, temporal overlap, contradiction detected
+        Example:
+            After storing 5 memories from a conversation:
+            - Analyze pairs: (m1,m2), (m1,m3), (m2,m3), (m1,m4), (m2,m4)...
+            - Infer relationships using LLM
+            - Store relationships with confidence >= 0.7
         """
-        if not self.neo4j.driver or not new_memory.embedding:
-            return None
+        if not self.relationship_service:
+            logger.debug("RelationshipInferenceService not configured, skipping inference")
+            return 0
 
         try:
-            # Query for semantically similar memories with temporal overlap
+            # Query for memories from this conversation
             query = """
-            MATCH (m:Memory)
-            WHERE m.has_embedding = true
-              AND m.id <> $new_memory_id
-              AND (m.valid_until IS NULL OR m.valid_until > datetime($valid_from))
-            WITH m,
-                 gds.similarity.cosine(m.embedding, $new_embedding) AS similarity
-            WHERE similarity >= $similarity_threshold
-              AND m.content <> $new_content
+            MATCH (c:Conversation {id: $conversation_id})-[:CONTAINS_MEMORY]->(m:Memory)
             RETURN
                 m.id AS memory_id,
                 m.content AS content,
-                m.memory_type AS memory_type,
-                m.valid_from AS valid_from,
-                m.valid_until AS valid_until,
-                similarity
-            ORDER BY similarity DESC
-            LIMIT 1
+                m.type AS memory_type
+            ORDER BY m.created_at ASC
             """
 
-            params = {
-                "new_memory_id": new_memory.memory_id,
-                "new_embedding": new_memory.embedding,
-                "new_content": new_memory.content,
-                "valid_from": new_memory.valid_from.isoformat(),
-                "similarity_threshold": similarity_threshold,
-            }
+            params = {"conversation_id": conversation_id}
 
             async with self.neo4j.driver.session() as session:
                 result = await session.run(query, **params)
-                record = await result.single()
+                records = await result.values()
 
-                if record:
-                    contradiction = dict(record)
-                    logger.info(
-                        f"Detected contradiction: new memory {new_memory.memory_id} "
-                        f"contradicts {contradiction['memory_id']} "
-                        f"(similarity: {contradiction['similarity']:.3f})"
-                    )
-                    return contradiction
+                if not records:
+                    logger.debug(f"No memories found for conversation {conversation_id}")
+                    return 0
 
-                return None
+                memories = [
+                    {
+                        "memory_id": record[0],
+                        "content": record[1],
+                        "memory_type": record[2] or "unknown",
+                    }
+                    for record in records
+                ]
 
-        except Exception as e:
-            logger.warning(
-                f"Contradiction detection failed (continuing without): {e}",
-                exc_info=True,
+            # Generate memory pairs (avoid n^2 explosion)
+            memory_pairs = []
+            for i in range(len(memories)):
+                for j in range(i + 1, len(memories)):
+                    memory_pairs.append((memories[i], memories[j]))
+                    if len(memory_pairs) >= max_pairs:
+                        break
+                if len(memory_pairs) >= max_pairs:
+                    break
+
+            if not memory_pairs:
+                logger.debug(f"No memory pairs to analyze for conversation {conversation_id}")
+                return 0
+
+            logger.info(
+                f"Analyzing {len(memory_pairs)} memory pairs for relationships "
+                f"(conversation: {conversation_id})"
             )
-            # Graceful degradation: continue without contradiction detection
-            return None
 
-    async def handle_superseding(self, new_memory: ExtractedMemory, old_memory_id: str) -> None:
-        """Handle superseding relationship between new and old memories.
+            # Batch infer relationships
+            inferred_relationships = await self.relationship_service.batch_infer_relationships(
+                memory_pairs
+            )
 
-        Updates old memory's valid_until to mark when it stopped being valid.
-        Creates SUPERSEDES relationship from new to old memory.
-        Preserves old memory for historical queries (P2: Temporal Truth).
+            # Store relationships in Neo4j
+            stored_count = 0
+            for from_id, to_id, inference in inferred_relationships:
+                success = await self.relationship_service.store_relationship(
+                    from_memory_id=from_id,
+                    to_memory_id=to_id,
+                    inference=inference,
+                )
+                if success:
+                    stored_count += 1
 
-        Args:
-            new_memory: New memory that supersedes the old one
-            old_memory_id: ID of memory being superseded
+            logger.info(
+                f"Stored {stored_count} relationships for conversation {conversation_id}",
+                extra={
+                    "pairs_analyzed": len(memory_pairs),
+                    "relationships_found": len(inferred_relationships),
+                    "relationships_stored": stored_count,
+                },
+            )
 
-        Example:
-            Old memory: "3 Proxmox nodes" becomes invalid on 2024-12-01
-            New memory: "4 Proxmox nodes" valid from 2024-12-01
-            SUPERSEDES relationship created for temporal chain
-        """
-        if not self.neo4j.driver:
-            logger.error("Neo4j driver not initialized for superseding")
-            return
-
-        try:
-            # Update old memory and create relationship
-            query = """
-            MATCH (old:Memory {id: $old_memory_id})
-            MATCH (new:Memory {id: $new_memory_id})
-            SET
-                old.valid_until = datetime($new_valid_from),
-                old.superseded_by = $new_memory_id
-            SET
-                new.supersedes = $old_memory_id
-            CREATE (new)-[:SUPERSEDES {created_at: datetime()}]->(old)
-            RETURN
-                old.id AS old_id,
-                old.valid_until AS old_valid_until,
-                new.id AS new_id
-            """
-
-            params = {
-                "old_memory_id": old_memory_id,
-                "new_memory_id": new_memory.memory_id,
-                "new_valid_from": new_memory.valid_from.isoformat(),
-            }
-
-            async with self.neo4j.driver.session() as session:
-                result = await session.run(query, **params)
-                record = await result.single()
-
-                if record:
-                    logger.info(
-                        f"Superseding complete: {new_memory.memory_id} supersedes {old_memory_id}",
-                        extra={
-                            "old_memory_id": old_memory_id,
-                            "new_memory_id": new_memory.memory_id,
-                            "old_valid_until": record["old_valid_until"],
-                        },
-                    )
-                else:
-                    logger.warning(
-                        f"Superseding relationship not created - memories may not exist"
-                    )
+            return stored_count
 
         except Exception as e:
             logger.error(
-                f"Failed to handle superseding for {old_memory_id}: {e}", exc_info=True
+                f"Failed to infer relationships for conversation {conversation_id}: {e}",
+                exc_info=True,
             )
-            # Don't raise - allow memory storage to continue
+            # Graceful degradation: continue without relationship inference
+            return 0
+
+    # =========================================================================
+    # NOTE: Old Session 10 methods (detect_contradiction, handle_superseding)
+    # have been replaced by TemporalManager in Session 12 (User Story 4)
+    # =========================================================================
