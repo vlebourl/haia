@@ -166,6 +166,12 @@ class Settings(BaseSettings):
         le=10.0,
     )
 
+    # Google API Configuration (Session 11 - Type Clustering with Google Embeddings)
+    google_api_key: str | None = Field(
+        None,
+        description="Google Gemini API key (required for type clustering with Google embeddings)",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
@@ -266,6 +272,67 @@ class ContextOptimizationConfig(BaseSettings):
     )
 
 
+class TypeClusteringConfig(BaseSettings):
+    """Configuration for semantic type clustering (Session 11).
+
+    Automatically clusters semantically similar memory types using DBSCAN
+    and Google Gemini embeddings to prevent vocabulary explosion.
+    """
+
+    # Type Clustering
+    type_clustering_enabled: bool = Field(
+        default=True, description="Enable automatic type clustering"
+    )
+    type_clustering_min_size: int = Field(
+        default=3,
+        ge=2,
+        le=10,
+        description="Minimum types required per cluster",
+    )
+    type_clustering_similarity_threshold: float = Field(
+        default=0.80,
+        ge=0.0,
+        le=1.0,
+        description="Cosine similarity threshold for clustering (0.75-0.85 recommended)",
+    )
+    type_clustering_schedule: str = Field(
+        default="0 4 * * *",
+        description="Cron expression for clustering schedule (default: daily at 4 AM)",
+    )
+
+    # Embedding Provider
+    type_embedding_provider: str = Field(
+        default="google",
+        description="Embedding provider: 'google' (API, recommended) or 'local' (sentence-transformers)",
+    )
+    google_embedding_model: str = Field(
+        default="text-embedding-004",
+        description="Google embedding model name (768-dim)",
+    )
+
+    # Type Expansion for Retrieval
+    type_expansion_enabled: bool = Field(
+        default=True, description="Enable semantic type expansion in retrieval"
+    )
+    type_expansion_similarity: float = Field(
+        default=0.80,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity for semantic neighbors",
+    )
+    type_expansion_max_neighbors: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum semantic neighbors to include in query expansion",
+    )
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
 # Global settings instances
 settings = Settings()
 context_optimization_config = ContextOptimizationConfig()
+type_clustering_config = TypeClusteringConfig()

@@ -10,7 +10,6 @@ from haia.extraction.models import (
     ExtractedMemory,
     ExtractionResult,
     Message,
-    MemoryCategory,
     ConfidenceLevel,
 )
 
@@ -20,6 +19,5 @@ __all__ = [
     "ExtractedMemory",
     "ExtractionResult",
     "Message",
-    "MemoryCategory",
     "ConfidenceLevel",
 ]
