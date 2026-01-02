@@ -35,6 +35,7 @@ class Neo4jService:
         self.user = user
         self.driver: Optional[AsyncDriver] = None
         self._password = password
+        self._apoc_available: Optional[bool] = None  # Cached APOC availability
         logger.info(f"Neo4j service initialized with URI: {uri}")
 
     @staticmethod
@@ -109,6 +110,54 @@ class Neo4jService:
                 return record["health"] == 1
         except Exception as e:
             logger.error(f"Neo4j health check failed: {e}")
+            return False
+
+    async def detect_apoc(self, force_recheck: bool = False) -> bool:
+        """Detect APOC plugin availability with result caching.
+
+        Checks if the APOC plugin is installed by calling apoc.version().
+        Result is cached to avoid repeated checks during runtime.
+
+        Args:
+            force_recheck: Force recheck even if cached result exists
+
+        Returns:
+            True if APOC is available, False otherwise
+
+        Example:
+            apoc_available = await neo4j_service.detect_apoc()
+            if apoc_available:
+                # Use APOC procedures for graph traversal
+            else:
+                # Fall back to native Cypher
+        """
+        if not self.driver:
+            logger.error("Cannot detect APOC: Driver not initialized")
+            return False
+
+        # Return cached result if available
+        if not force_recheck and self._apoc_available is not None:
+            return self._apoc_available
+
+        try:
+            async with self.driver.session() as session:
+                result = await session.run("RETURN apoc.version() AS version")
+                record = await result.single()
+                if record:
+                    version = record["version"]
+                    self._apoc_available = True
+                    logger.info(f"APOC plugin detected: version {version}")
+                    return True
+                else:
+                    self._apoc_available = False
+                    logger.warning("APOC detection returned no result")
+                    return False
+        except Exception as e:
+            # APOC not available - log warning but don't fail
+            self._apoc_available = False
+            logger.warning(
+                f"APOC plugin not available (will use native Cypher fallback): {e}"
+            )
             return False
 
     async def create_node(

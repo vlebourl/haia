@@ -376,8 +376,48 @@ class RelationshipInferenceConfig(BaseSettings):
     )
 
 
+class HybridRetrievalConfig(BaseSettings):
+    """Configuration for hybrid retrieval system (Session 13).
+
+    Combines vector search, BM25 keyword matching, and graph traversal
+    using Reciprocal Rank Fusion for improved recall and precision.
+    """
+
+    # Hybrid Retrieval
+    hybrid_retrieval_enabled: bool = Field(
+        default=True, description="Enable hybrid retrieval mode"
+    )
+    hybrid_default_methods: str = Field(
+        default="vector,bm25,graph",
+        description="Default enabled methods (comma-separated: vector,bm25,graph)",
+    )
+    hybrid_graph_max_depth: int = Field(
+        default=2,
+        ge=1,
+        le=3,
+        description="Maximum hops for graph traversal (1-3)",
+    )
+    hybrid_rrf_k: int = Field(
+        default=60,
+        ge=1,
+        description="RRF constant parameter (standard: 60)",
+    )
+    hybrid_enable_apoc: bool = Field(
+        default=True,
+        description="Try APOC plugin first, fallback to native Cypher if unavailable",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="HYBRID_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 # Global settings instances
 settings = Settings()
 context_optimization_config = ContextOptimizationConfig()
 type_clustering_config = TypeClusteringConfig()
 relationship_inference_config = RelationshipInferenceConfig()
+hybrid_retrieval_config = HybridRetrievalConfig()
