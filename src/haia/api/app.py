@@ -20,6 +20,7 @@ from haia.config import settings
 from haia.embedding.ollama_client import OllamaClient
 from haia.embedding.retrieval_service import RetrievalService
 from haia.extraction import ExtractionService
+from haia.interfaces.scheduler import HAIAScheduler
 from haia.memory.tracker import ConversationTracker
 from haia.services.memory_storage import MemoryStorageService
 from haia.services.neo4j import Neo4jService
@@ -173,12 +174,42 @@ async def lifespan(app: FastAPI):
                 "Backfilling disabled, but embedding generation on new memories will continue."
             )
 
+    # Initialize background scheduler (Session 11 - Type Clustering)
+    scheduler = None
+    if settings.type_clustering_enabled:
+        try:
+            logger.info("Initializing HAIA scheduler for background tasks")
+            scheduler = HAIAScheduler(
+                neo4j_service=neo4j_service,
+                extraction_model=settings.extraction_model or settings.haia_model,
+                type_clustering_enabled=settings.type_clustering_enabled,
+                type_clustering_schedule=settings.type_clustering_schedule,
+                min_cluster_size=settings.type_clustering_min_size,
+                similarity_threshold=settings.type_clustering_similarity_threshold,
+                embedding_provider=settings.type_embedding_provider,
+                google_api_key=settings.google_api_key if settings.type_embedding_provider == "google" else None,
+                google_embedding_model=settings.google_embedding_model,
+            )
+            scheduler.start()
+            logger.info(f"HAIA scheduler started (type clustering: {settings.type_clustering_schedule})")
+        except Exception as e:
+            logger.warning(
+                f"Failed to initialize scheduler: {e}. "
+                "Background tasks disabled, but all other features will continue."
+            )
+
     logger.info("Server startup complete - ready to accept requests")
 
     yield  # Application runs here
 
     # Shutdown
     logger.info("Shutting down HAIA Chat API server...")
+
+    # Stop scheduler if running
+    if scheduler:
+        logger.info("Stopping scheduler...")
+        scheduler.stop()
+        logger.info("Scheduler stopped")
 
     # Stop backfill worker if running
     if backfill_task and not backfill_task.done():
