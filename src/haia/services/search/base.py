@@ -288,3 +288,37 @@ class NetworkError(SearchError):
         self.backend = backend
         self.original_error = original_error
         super().__init__(f"Network error for {backend}: {original_error}")
+
+
+class AuthenticationError(SearchError):
+    """
+    Raised when API authentication fails (T086).
+
+    Common causes:
+    - Invalid API key
+    - Expired API key
+    - Missing API credentials
+    - Insufficient API permissions
+    """
+
+    def __init__(self, backend: str, message: str = "Authentication failed"):
+        self.backend = backend
+        super().__init__(f"Authentication error for {backend}: {message}")
+
+
+class QuotaExceededError(RateLimitError):
+    """
+    Raised when API quota is exceeded (daily/monthly limits).
+
+    Different from rate limiting (requests/second), quota limits are
+    typically daily or monthly usage caps.
+    """
+
+    def __init__(self, backend: str, quota_type: str = "daily", reset_time: str | None = None):
+        self.backend = backend
+        self.quota_type = quota_type
+        self.reset_time = reset_time
+        message = f"{quota_type.capitalize()} quota exceeded for {backend}"
+        if reset_time:
+            message += f". Resets at {reset_time}"
+        super(SearchError, self).__init__(message)

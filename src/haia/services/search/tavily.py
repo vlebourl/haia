@@ -22,6 +22,7 @@ from haia.models.search import (
     TimeRange,
 )
 from haia.services.search.base import (
+    AuthenticationError,
     BackendError,
     BaseSearchBackend,
     NetworkError,
@@ -89,9 +90,9 @@ class TavilySearchClient(BaseSearchBackend):
             NetworkError: When network connection fails
         """
         if not self.api_key:
-            raise BackendError(
+            raise AuthenticationError(
                 self.backend_type,
-                message="Tavily API key not configured",
+                message="Tavily API key not configured. Set SEARCH_TAVILY_API_KEY environment variable.",
             )
 
         start_time = time.time()
@@ -119,7 +120,7 @@ class TavilySearchClient(BaseSearchBackend):
             }
             payload["days"] = days_map.get(request.time_range, None)
 
-        # Execute request
+        # Execute request (T085-T087)
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -128,12 +129,23 @@ class TavilySearchClient(BaseSearchBackend):
                     timeout=self.timeout,
                 )
 
-                # Handle rate limiting
+                # Handle authentication errors (T086)
+                if response.status_code in (401, 403):
+                    error_detail = response.text[:200] if response.text else "Invalid or expired API key"
+                    raise AuthenticationError(
+                        self.backend_type,
+                        message=f"{error_detail}. Check SEARCH_TAVILY_API_KEY configuration.",
+                    )
+
+                # Handle rate limiting (T087)
                 if response.status_code == 429:
                     retry_after = int(response.headers.get("Retry-After", 60))
+                    logger.warning(
+                        f"Tavily Search rate limit exceeded. Retry after {retry_after} seconds."
+                    )
                     raise RateLimitError(self.backend_type, retry_after)
 
-                # Handle errors
+                # Handle other errors
                 if response.status_code != 200:
                     raise BackendError(
                         self.backend_type,
@@ -144,8 +156,13 @@ class TavilySearchClient(BaseSearchBackend):
                 data = response.json()
 
         except httpx.TimeoutException as e:
+            logger.error(f"Tavily Search request timeout after {self.timeout}s: {e}")
+            raise NetworkError(self.backend_type, e)
+        except httpx.ConnectError as e:
+            logger.error(f"Failed to connect to Tavily Search API: {e}")
             raise NetworkError(self.backend_type, e)
         except httpx.RequestError as e:
+            logger.error(f"Tavily Search network error: {e}")
             raise NetworkError(self.backend_type, e)
 
         # Parse results

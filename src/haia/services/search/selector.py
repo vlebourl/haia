@@ -21,6 +21,7 @@ from haia.models.search import (
     SearchResult,
 )
 from haia.services.search.base import (
+    AuthenticationError,
     BackendError,
     BaseSearchBackend,
     NetworkError,
@@ -175,10 +176,19 @@ class SearchBackendSelector:
 
                 return response
 
+            except AuthenticationError as e:
+                logger.error(f"Authentication failed for {backend_type.value}: {e}")
+                self.backend_health[backend_type] = BackendHealth.FAILED
+                # Track error (T086)
+                self.metrics.record_query(backend_type, from_cache=False, error=True)
+                errors.append(f"{backend_type.value}: {e}")
+                # Don't retry authentication errors - they're configuration issues
+                continue
+
             except RateLimitError as e:
                 logger.warning(f"Rate limit hit for {backend_type.value}: {e}")
                 self.backend_health[backend_type] = BackendHealth.RATE_LIMITED
-                # Track error (T074)
+                # Track error (T087)
                 self.metrics.record_query(backend_type, from_cache=False, error=True)
                 if e.retry_after:
                     self.rate_limit_until[backend_type] = datetime.now(UTC) + timedelta(
@@ -190,7 +200,7 @@ class SearchBackendSelector:
             except (BackendError, NetworkError) as e:
                 logger.warning(f"Backend error for {backend_type.value}: {e}")
                 self.backend_health[backend_type] = BackendHealth.FAILED
-                # Track error (T074)
+                # Track error (T085)
                 self.metrics.record_query(backend_type, from_cache=False, error=True)
                 errors.append(f"{backend_type.value}: {e}")
                 continue

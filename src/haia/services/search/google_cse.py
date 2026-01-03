@@ -25,9 +25,11 @@ from haia.models.search import (
     TimeRange,
 )
 from haia.services.search.base import (
+    AuthenticationError,
     BackendError,
     BaseSearchBackend,
     NetworkError,
+    QuotaExceededError,
     RateLimitError,
     detect_content_type,
     extract_domain,
@@ -194,9 +196,9 @@ class GoogleCSEClient(BaseSearchBackend):
             NetworkError: When network connection fails
         """
         if not self.api_key or not self.engine_id:
-            raise BackendError(
+            raise AuthenticationError(
                 self.backend_type,
-                message="Google CSE API key or engine ID not configured",
+                message="Google CSE API key or engine ID not configured. Set SEARCH_GOOGLE_CSE_API_KEY and SEARCH_GOOGLE_CSE_ENGINE_ID.",
             )
 
         # Check daily usage limit (T063)
@@ -209,7 +211,8 @@ class GoogleCSEClient(BaseSearchBackend):
             now = datetime.now(UTC)
             midnight = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), UTC)
             retry_after = int((midnight - now).total_seconds())
-            raise RateLimitError(self.backend_type, retry_after)
+            reset_time = midnight.strftime("%Y-%m-%d %H:%M:%S UTC")
+            raise QuotaExceededError(self.backend_type, quota_type="daily", reset_time=reset_time)
 
         start_time = time.time()
 
@@ -243,12 +246,24 @@ class GoogleCSEClient(BaseSearchBackend):
                     timeout=self.timeout,
                 )
 
-                # Handle rate limiting
+                # Handle authentication errors (T086)
+                if response.status_code in (401, 403):
+                    error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+                    error_msg = error_data.get("error", {}).get("message", "Invalid or expired API credentials")
+                    raise AuthenticationError(
+                        self.backend_type,
+                        message=f"{error_msg}. Check SEARCH_GOOGLE_CSE_API_KEY and SEARCH_GOOGLE_CSE_ENGINE_ID.",
+                    )
+
+                # Handle rate limiting (T087)
                 if response.status_code == 429:
                     retry_after = int(response.headers.get("Retry-After", 60))
+                    logger.warning(
+                        f"Google CSE rate limit exceeded. Retry after {retry_after} seconds."
+                    )
                     raise RateLimitError(self.backend_type, retry_after)
 
-                # Handle errors
+                # Handle other errors
                 if response.status_code != 200:
                     error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
                     error_msg = error_data.get("error", {}).get("message", response.text[:200])
@@ -264,8 +279,13 @@ class GoogleCSEClient(BaseSearchBackend):
                 self.usage_tracker.increment()
 
         except httpx.TimeoutException as e:
+            logger.error(f"Google CSE request timeout after {self.timeout}s: {e}")
+            raise NetworkError(self.backend_type, e)
+        except httpx.ConnectError as e:
+            logger.error(f"Failed to connect to Google CSE API: {e}")
             raise NetworkError(self.backend_type, e)
         except httpx.RequestError as e:
+            logger.error(f"Google CSE network error: {e}")
             raise NetworkError(self.backend_type, e)
 
         # Parse results
