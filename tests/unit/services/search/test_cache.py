@@ -316,4 +316,5 @@ class TestSearchCacheService:
 
         # All should succeed
         assert all(r is not None for r in results)
-        assert all(r.query == query for r in results)
+        # Cached responses have the original query from sample_response
+        assert all(r.query == sample_response.query for r in results)

@@ -214,32 +214,42 @@ class DuckDuckGoClient(BaseSearchBackend):
         results = []
 
         for item in data:
-            # Extract domain
-            domain = extract_domain(item["href"])
+            try:
+                # Skip items missing required fields
+                if "href" not in item or "title" not in item:
+                    logger.warning(f"Skipping malformed DuckDuckGo result: missing required fields")
+                    continue
 
-            # Filter by allowed/blocked domains
-            if request.allowed_domains and domain not in request.allowed_domains:
+                # Extract domain
+                domain = extract_domain(item["href"])
+
+                # Filter by allowed/blocked domains
+                if request.allowed_domains and domain not in request.allowed_domains:
+                    continue
+                if request.blocked_domains and domain in request.blocked_domains:
+                    continue
+
+                # DuckDuckGo doesn't provide publication dates
+                published_date = None
+
+                # Detect content type
+                content_type = detect_content_type(item["href"], item.get("title", ""))
+
+                result = SearchResult(
+                    title=item["title"],
+                    url=item["href"],
+                    snippet=item.get("body", ""),
+                    domain=domain,
+                    published_date=published_date,
+                    relevance_score=0.0,  # Will be calculated by selector
+                    backend_score=None,  # DuckDuckGo doesn't provide scores
+                    content_type=content_type,
+                )
+                results.append(result)
+            except (KeyError, ValueError, TypeError) as e:
+                # Skip malformed results gracefully
+                logger.warning(f"Skipping malformed DuckDuckGo result: {e}")
                 continue
-            if request.blocked_domains and domain in request.blocked_domains:
-                continue
-
-            # DuckDuckGo doesn't provide publication dates
-            published_date = None
-
-            # Detect content type
-            content_type = detect_content_type(item["href"], item.get("title", ""))
-
-            result = SearchResult(
-                title=item["title"],
-                url=item["href"],
-                snippet=item.get("body", ""),
-                domain=domain,
-                published_date=published_date,
-                relevance_score=0.0,  # Will be calculated by selector
-                backend_score=None,  # DuckDuckGo doesn't provide scores
-                content_type=content_type,
-            )
-            results.append(result)
 
         return results
 

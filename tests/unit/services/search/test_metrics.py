@@ -30,7 +30,9 @@ def metrics_service(temp_metrics_file):
     with patch("haia.services.search.metrics.search_backend_settings") as mock_settings:
         mock_settings.search_daily_budget_usd = 1.0
         mock_settings.search_monthly_budget_usd = 10.0
-        return SearchMetricsService(storage_path=temp_metrics_file)
+        service = SearchMetricsService(storage_path=temp_metrics_file)
+        # Yield with patch still active to persist mock settings
+        yield service
 
 
 class TestBackendMetrics:
@@ -155,7 +157,8 @@ class TestSearchMetricsService:
         """Test monthly budget warning alert (T081)."""
         # Monthly budget: $10.00, so 80% = $8.00
         # Brave: $0.005 per query, so need 1600 queries
-        for _ in range(1600):
+        # Use 1601 to account for floating point precision
+        for _ in range(1601):
             metrics_service.record_query(SearchBackendType.BRAVE, from_cache=False)
 
         summary = metrics_service.get_summary()

@@ -87,7 +87,7 @@ class TestBraveSearchClient:
         request = SearchRequest(
             query="Proxmox VE",
             max_results=10,
-            time_range=TimeRange.PAST_WEEK,
+            time_range=TimeRange.WEEK,
         )
 
         with patch("httpx.AsyncClient") as mock_client_class:

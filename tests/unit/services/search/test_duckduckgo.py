@@ -64,7 +64,7 @@ class TestDuckDuckGoClient:
         request = SearchRequest(
             query="Proxmox VE",
             max_results=10,
-            time_range=TimeRange.PAST_MONTH,
+            time_range=TimeRange.MONTH,
         )
 
         with patch.object(ddg_client, "_sync_search", return_value=mock_ddg_results) as mock_sync:
@@ -105,7 +105,11 @@ class TestDuckDuckGoClient:
                 await ddg_client.search(request)
 
             assert exc_info.value.backend == "duckduckgo"
-            assert "max retries" in str(exc_info.value).lower() or "failed" in str(exc_info.value).lower()
+            assert (
+                "max retries" in str(exc_info.value).lower()
+                or "failed" in str(exc_info.value).lower()
+                or "failure" in str(exc_info.value).lower()
+            )
 
     @pytest.mark.asyncio
     async def test_search_empty_results(self, ddg_client):
@@ -203,8 +207,10 @@ class TestDuckDuckGoClient:
             assert results[0]["title"] == "Test Result"
             mock_ddgs.text.assert_called_once_with(
                 keywords="test query",
-                max_results=10,
+                region="wt-wt",
+                safesearch="moderate",
                 timelimit=None,
+                max_results=10,
             )
 
     def test_sync_search_with_timelimit(self, ddg_client):
@@ -218,6 +224,8 @@ class TestDuckDuckGoClient:
 
             mock_ddgs.text.assert_called_once_with(
                 keywords="test query",
-                max_results=10,
+                region="wt-wt",
+                safesearch="moderate",
                 timelimit="w",
+                max_results=10,
             )

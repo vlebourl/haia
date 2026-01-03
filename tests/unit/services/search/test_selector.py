@@ -116,7 +116,7 @@ class TestSearchBackendSelector:
         request = SearchRequest(query="test query", max_results=10)
 
         # Brave rate limited, DuckDuckGo succeeds
-        brave_mock = AsyncMock(side_effect=RateLimitError("brave", "Rate limit exceeded", retry_after=60))
+        brave_mock = AsyncMock(side_effect=RateLimitError("brave", retry_after=60))
         ddg_response = SearchResponse(
             query="test query",
             backend_used=SearchBackendType.DUCKDUCKGO,
@@ -418,7 +418,7 @@ class TestSearchBackendSelector:
                 snippet=f"Content {i}",
                 domain="example.com",
                 published_date=None,
-                relevance_score=0.9 - (i * 0.1),  # Decreasing scores
+                relevance_score=max(0.0, 0.9 - (i * 0.05)),  # Decreasing scores (keep >= 0)
                 backend_score=0.5,
                 content_type=ContentType.DOCUMENTATION,
             )
