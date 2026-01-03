@@ -7,7 +7,7 @@
 
 This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Features are organized by phase, with dependencies clearly marked.
 
-**Current Status**: Phase 2 Memory System IN PROGRESS - Sessions 1-10 complete. OpenAI-compatible API with streaming, conversation boundary detection, Neo4j memory infrastructure, automatic memory extraction, embedding-based retrieval, context optimization, AND hybrid temporal memory MVP all operational. Session 10 MVP delivers bi-temporal tracking and dynamic entity types (zero hardcoded categories). **Phase 2 continuation (type clustering, relationship inference) and Phase 3 (homelab tool integration) are next.**
+**Current Status**: Phase 2 Memory System NEAR COMPLETION - Session 14 in progress. Sessions 1-14 complete US1-US7 of spec 010 (hybrid temporal memory). OpenAI-compatible API with streaming, conversation boundary detection, Neo4j memory infrastructure, automatic memory extraction, embedding-based retrieval, context optimization, bi-temporal tracking, dynamic entity types, type clustering, relationship inference, hybrid retrieval, memory consolidation, AND theme discovery all operational. **Next: Phase 10 Polish (spec 010 completion), then Phase 2.5 Web Search Integration (HIGH PRIORITY - URGENT 🔥).**
 
 ## Roadmap Phases
 
@@ -302,6 +302,74 @@ This roadmap outlines the planned development of HAIA (Homelab AI Assistant). Fe
 - ✅ Memory Retrieval System (Session 8)
 
 **Priority**: P2 - Improves memory system efficiency
+
+---
+
+### Phase 2.5: Web Search Integration [HIGH PRIORITY - URGENT]
+
+#### [P2.5] Web Search Capability 🔥
+
+**Description**: Integrate web search capabilities to allow HAIA to search the internet for current information, documentation, and answers to questions beyond its knowledge base.
+
+**User Value**: Users can ask HAIA to search for current information, latest documentation, troubleshooting guides, and real-time data. Critical for homelab troubleshooting where solutions are often found in forums, docs, and recent blog posts.
+
+**Implementation Approach**:
+- Web search tool using PydanticAI `@agent.tool` decorator
+- Multiple search backend options:
+  - **Brave Search API** (recommended): Privacy-focused, generous free tier (2000 queries/month)
+  - **DuckDuckGo HTML scraping**: Free, no API key, privacy-focused (fallback)
+  - **Google Custom Search API**: More results, requires API key (optional)
+  - **Tavily AI Search**: AI-optimized search with summarization (optional)
+- Search result processing:
+  - Extract snippets, URLs, titles from search results
+  - Rank results by relevance
+  - Format as natural language for LLM context
+  - Optionally fetch and parse top result pages for detailed info
+- Integration with memory system:
+  - Optionally store search results as memories for future reference
+  - Track search queries to avoid redundant searches
+- Configuration:
+  - `WEB_SEARCH_ENABLED`: Enable/disable web search (default: true)
+  - `WEB_SEARCH_PROVIDER`: brave / duckduckgo / google / tavily
+  - `BRAVE_API_KEY`: Brave Search API key (if using Brave)
+  - `GOOGLE_CSE_ID` + `GOOGLE_API_KEY`: Google Custom Search credentials
+  - `TAVILY_API_KEY`: Tavily AI Search API key
+  - `WEB_SEARCH_MAX_RESULTS`: Maximum results to return (default: 5)
+  - `WEB_SEARCH_ENABLE_FETCH`: Fetch and parse result pages (default: false)
+- Located in: `src/haia/tools/web_search.py`, `src/haia/clients/search/`
+
+**Use Cases**:
+- "Search for how to fix Proxmox Ceph mon down error"
+- "Find the latest Home Assistant release notes"
+- "Search for Docker compose best practices 2026"
+- "Look up ESPHome documentation for temperature sensors"
+- "Find troubleshooting guides for failed ZFS pool"
+
+**Dependencies**:
+- ✅ PydanticAI Agent Setup (Phase 0)
+- ✅ Configuration Management (Phase 0)
+- 📦 `httpx` for async HTTP requests (already installed)
+- 📦 `beautifulsoup4` for HTML parsing (optional, for page fetching)
+- 🔑 API keys: Brave Search (recommended, free tier available)
+
+**Constitution Compliance**:
+- Type Safety: Search results mapped to Pydantic models
+- Async-First: All search operations async (non-blocking)
+- Observability: Log all search queries and results
+- Privacy: Prefer privacy-focused search providers (Brave, DDG)
+- Graceful Degradation: Fallback to DuckDuckGo if primary provider fails
+
+**Effort Estimate**: M - API integration, multiple providers, result parsing, testing
+
+**Priority**: **P2.5 - HIGH PRIORITY - URGENT** 🔥
+- Critical for homelab troubleshooting and real-time information
+- Should be implemented immediately after Phase 10 Polish (spec 010 completion)
+- Blocks user value for time-sensitive queries and current documentation
+
+**Next Steps After 010 Completion**:
+1. **Phase 10: Polish & Documentation** (spec 010, 21 tasks) - Complete remaining 010 work
+2. **Web Search Integration** (this feature) - HIGH PRIORITY, implement immediately
+3. Phase 3: Tool Integration & Extensibility - Proxmox, MCP, etc. (lower priority)
 
 ---
 
