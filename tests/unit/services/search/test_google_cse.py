@@ -10,7 +10,12 @@ import tempfile
 
 from haia.services.search.google_cse import GoogleCSEClient, DailyUsageTracker
 from haia.models.search import SearchBackendType, SearchRequest, SearchResponse
-from haia.services.search.base import BackendError, RateLimitError
+from haia.services.search.base import (
+    AuthenticationError,
+    BackendError,
+    QuotaExceededError,
+    RateLimitError,
+)
 
 
 @pytest.fixture
@@ -26,7 +31,9 @@ def temp_usage_file():
 def usage_tracker(temp_usage_file):
     """Create usage tracker with temporary storage."""
     tracker = DailyUsageTracker(limit=100)
+    # Override usage file and reload to use temp file
     tracker.usage_file = temp_usage_file
+    tracker._load_usage()  # Reload from temp file (which is empty)
     return tracker
 
 
@@ -103,6 +110,7 @@ class TestDailyUsageTracker:
         # First tracker - make some queries
         tracker1 = DailyUsageTracker(limit=100)
         tracker1.usage_file = temp_usage_file
+        tracker1._load_usage()  # Reload from temp file first
         tracker1.increment()
         tracker1.increment()
         tracker1.increment()
@@ -152,7 +160,7 @@ class TestGoogleCSEClient:
         request = SearchRequest(query="proxmox documentation", max_results=5)
 
         with patch("httpx.AsyncClient") as mock_client_class:
-            mock_response = AsyncMock()
+            mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = mock_google_response
 
@@ -211,7 +219,7 @@ class TestGoogleCSEClient:
         initial_count = google_client.usage_tracker.count
 
         with patch("httpx.AsyncClient") as mock_client_class:
-            mock_response = AsyncMock()
+            mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = mock_google_response
 
@@ -230,7 +238,7 @@ class TestGoogleCSEClient:
         request = SearchRequest(query="test", max_results=5)
 
         with patch("httpx.AsyncClient") as mock_client_class:
-            mock_response = AsyncMock()
+            mock_response = MagicMock()
             mock_response.status_code = 429
             mock_response.headers = {"Retry-After": "60"}
 
@@ -254,7 +262,7 @@ class TestGoogleCSEClient:
 
             request = SearchRequest(query="test", max_results=5)
 
-            with pytest.raises(BackendError) as exc_info:
+            with pytest.raises(AuthenticationError) as exc_info:
                 await client.search(request)
 
             assert "not configured" in str(exc_info.value)

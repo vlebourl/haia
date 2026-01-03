@@ -212,7 +212,12 @@ class GoogleCSEClient(BaseSearchBackend):
             midnight = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), UTC)
             retry_after = int((midnight - now).total_seconds())
             reset_time = midnight.strftime("%Y-%m-%d %H:%M:%S UTC")
-            raise QuotaExceededError(self.backend_type, quota_type="daily", reset_time=reset_time)
+            raise QuotaExceededError(
+                self.backend_type,
+                quota_type="daily",
+                reset_time=reset_time,
+                retry_after=retry_after,
+            )
 
         start_time = time.time()
 

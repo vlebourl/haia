@@ -8,7 +8,12 @@ from datetime import datetime, UTC
 
 from haia.services.search.tavily import TavilySearchClient
 from haia.models.search import SearchBackendType, SearchRequest, SearchResponse
-from haia.services.search.base import BackendError, RateLimitError, NetworkError
+from haia.services.search.base import (
+    AuthenticationError,
+    BackendError,
+    RateLimitError,
+    NetworkError,
+)
 
 
 @pytest.fixture
@@ -57,7 +62,9 @@ class TestTavilySearchClient:
         request = SearchRequest(query="proxmox documentation", max_results=5)
 
         with patch("httpx.AsyncClient") as mock_client_class:
-            mock_response = AsyncMock()
+            from unittest.mock import MagicMock
+
+            mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = mock_tavily_response
 
@@ -100,7 +107,9 @@ class TestTavilySearchClient:
         )
 
         with patch("httpx.AsyncClient") as mock_client_class:
-            mock_response = AsyncMock()
+            from unittest.mock import MagicMock
+
+            mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = mock_tavily_response
 
@@ -142,7 +151,9 @@ class TestTavilySearchClient:
         request = SearchRequest(query="test", max_results=5)
 
         with patch("httpx.AsyncClient") as mock_client_class:
-            mock_response = AsyncMock()
+            from unittest.mock import MagicMock
+
+            mock_response = MagicMock()
             mock_response.status_code = 500
             mock_response.text = "Internal server error"
 
@@ -165,7 +176,7 @@ class TestTavilySearchClient:
 
             request = SearchRequest(query="test", max_results=5)
 
-            with pytest.raises(BackendError) as exc_info:
+            with pytest.raises(AuthenticationError) as exc_info:
                 await client.search(request)
 
             assert "not configured" in str(exc_info.value)

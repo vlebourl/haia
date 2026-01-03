@@ -314,11 +314,19 @@ class QuotaExceededError(RateLimitError):
     typically daily or monthly usage caps.
     """
 
-    def __init__(self, backend: str, quota_type: str = "daily", reset_time: str | None = None):
-        self.backend = backend
+    def __init__(
+        self,
+        backend: str,
+        quota_type: str = "daily",
+        reset_time: str | None = None,
+        retry_after: int | None = None,
+    ):
         self.quota_type = quota_type
         self.reset_time = reset_time
+        # Call parent RateLimitError.__init__ to properly set backend and retry_after
+        super().__init__(backend, retry_after)
+        # Override message to include quota details
         message = f"{quota_type.capitalize()} quota exceeded for {backend}"
         if reset_time:
             message += f". Resets at {reset_time}"
-        super(SearchError, self).__init__(message)
+        self.args = (message,)

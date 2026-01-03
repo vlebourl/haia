@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 
 from haia.models.search import SearchBackendType, SearchRequest, SearchResponse, TimeRange
-from haia.services.search.base import BackendError, NetworkError, RateLimitError
+from haia.services.search.base import (
+    AuthenticationError,
+    BackendError,
+    NetworkError,
+    RateLimitError,
+)
 from haia.services.search.brave import BraveSearchClient
 
 
@@ -134,7 +139,7 @@ class TestBraveSearchClient:
             mock_response.status_code = 401
             mock_client.get.return_value = mock_response
 
-            with pytest.raises(BackendError) as exc_info:
+            with pytest.raises(AuthenticationError) as exc_info:
                 await brave_client.search(request)
 
             assert exc_info.value.backend == "brave"
@@ -185,7 +190,7 @@ class TestBraveSearchClient:
             client = BraveSearchClient()
             request = SearchRequest(query="test", max_results=10)
 
-            with pytest.raises(BackendError) as exc_info:
+            with pytest.raises(AuthenticationError) as exc_info:
                 await client.search(request)
 
             assert "api key" in str(exc_info.value).lower()
