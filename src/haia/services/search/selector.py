@@ -5,6 +5,7 @@ Provides automatic backend selection, failover, and result processing
 with relevance scoring and ranking.
 """
 
+import asyncio
 import logging
 import re
 import time
@@ -19,10 +20,18 @@ from haia.models.search import (
     SearchResponse,
     SearchResult,
 )
-from haia.services.search.base import BackendError, NetworkError, RateLimitError
+from haia.services.search.base import (
+    BackendError,
+    BaseSearchBackend,
+    NetworkError,
+    RateLimitError,
+)
 from haia.services.search.brave import BraveSearchClient
 from haia.services.search.cache import SearchCacheService
 from haia.services.search.duckduckgo import DuckDuckGoClient
+from haia.services.search.google_cse import GoogleCSEClient
+from haia.services.search.metrics import SearchMetricsService
+from haia.services.search.tavily import TavilySearchClient
 
 logger = logging.getLogger(__name__)
 
@@ -50,19 +59,24 @@ class SearchBackendSelector:
     def __init__(
         self,
         cache: SearchCacheService | None = None,
+        metrics: SearchMetricsService | None = None,
     ):
         """
         Initialize backend selector.
 
         Args:
             cache: Search cache service (creates new if not provided)
+            metrics: Metrics service for cost tracking (creates new if not provided)
         """
         self.cache = cache or SearchCacheService()
+        self.metrics = metrics or SearchMetricsService()
 
-        # Initialize backends
+        # Initialize backends (T064)
         self.backends = {
             SearchBackendType.BRAVE: BraveSearchClient(),
             SearchBackendType.DUCKDUCKGO: DuckDuckGoClient(),
+            SearchBackendType.TAVILY: TavilySearchClient(),
+            SearchBackendType.GOOGLE_CSE: GoogleCSEClient(),
         }
 
         # Parse backend priority from config
@@ -131,6 +145,8 @@ class SearchBackendSelector:
                     logger.info(
                         f"Cache hit for '{request.query}' (backend: {backend_type.value})"
                     )
+                    # Track cache hit (T074)
+                    self.metrics.record_query(backend_type, from_cache=True)
                     # Mark as from cache
                     cached.from_cache = True
                     return cached
@@ -143,6 +159,9 @@ class SearchBackendSelector:
                 logger.info(f"Attempting search with {backend_type.value}")
 
                 response = await backend.search(request)
+
+                # Track successful query (T074)
+                self.metrics.record_query(backend_type, from_cache=False)
 
                 # Apply relevance scoring and ranking
                 response = self._process_results(response, request)
@@ -159,6 +178,8 @@ class SearchBackendSelector:
             except RateLimitError as e:
                 logger.warning(f"Rate limit hit for {backend_type.value}: {e}")
                 self.backend_health[backend_type] = BackendHealth.RATE_LIMITED
+                # Track error (T074)
+                self.metrics.record_query(backend_type, from_cache=False, error=True)
                 if e.retry_after:
                     self.rate_limit_until[backend_type] = datetime.now(UTC) + timedelta(
                         seconds=e.retry_after
@@ -169,6 +190,8 @@ class SearchBackendSelector:
             except (BackendError, NetworkError) as e:
                 logger.warning(f"Backend error for {backend_type.value}: {e}")
                 self.backend_health[backend_type] = BackendHealth.FAILED
+                # Track error (T074)
+                self.metrics.record_query(backend_type, from_cache=False, error=True)
                 errors.append(f"{backend_type.value}: {e}")
                 continue
 
@@ -382,6 +405,161 @@ class SearchBackendSelector:
 
         # Normalize to 0.0-1.0 range
         return min(1.0, score)
+
+    async def multi_source_search(
+        self,
+        request: SearchRequest,
+        backends: list[SearchBackendType] | None = None,
+    ) -> SearchResponse:
+        """
+        Query multiple backends simultaneously and aggregate results (T065-T066).
+
+        This method enables cross-referencing information from multiple sources
+        for high-stakes decisions where verification is critical.
+
+        Workflow:
+        1. Query multiple backends in parallel
+        2. Aggregate results from all sources
+        3. Deduplicate by URL (track which backends returned each result)
+        4. Apply relevance scoring
+        5. Sort by relevance
+
+        Args:
+            request: Search request
+            backends: List of backends to query (defaults to all available)
+
+        Returns:
+            SearchResponse with aggregated results and source attribution
+
+        Raises:
+            BackendError: If all backends fail
+        """
+        # Determine which backends to query
+        if backends is None:
+            # Use all available backends
+            backend_list = self._get_available_backends(request)
+        else:
+            # Filter to only available backends from the specified list
+            available = self._get_available_backends(request)
+            backend_list = [b for b in backends if b in available]
+
+        if not backend_list:
+            raise BackendError("all", message="No backends available for multi-source search")
+
+        logger.info(
+            f"Multi-source search: querying {len(backend_list)} backends ({[b.value for b in backend_list]})"
+        )
+
+        # Query all backends in parallel
+        start_time = time.time()
+        tasks = []
+        for backend_type in backend_list:
+            backend = self.backends[backend_type]
+            tasks.append(self._query_backend_safe(backend, backend_type, request))
+
+        # Wait for all queries to complete
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Aggregate results from successful queries
+        aggregated_results: dict[str, SearchResult] = {}  # URL -> SearchResult
+        successful_backends = []
+
+        for backend_type, response in zip(backend_list, responses):
+            if isinstance(response, Exception):
+                logger.warning(f"Backend {backend_type.value} failed: {response}")
+                continue
+
+            if isinstance(response, SearchResponse):
+                successful_backends.append(backend_type)
+
+                for result in response.results:
+                    url = result.url
+
+                    if url in aggregated_results:
+                        # Deduplicate: same URL found in multiple backends
+                        # Track source attribution
+                        if backend_type not in aggregated_results[url].source_backends:
+                            aggregated_results[url].source_backends.append(backend_type)
+
+                        # Keep the result with higher backend_score if available
+                        if result.backend_score is not None:
+                            if (
+                                aggregated_results[url].backend_score is None
+                                or result.backend_score > aggregated_results[url].backend_score
+                            ):
+                                aggregated_results[url].backend_score = result.backend_score
+                    else:
+                        # New result
+                        result.source_backends = [backend_type]
+                        aggregated_results[url] = result
+
+        if not successful_backends:
+            raise BackendError("all", message="All backends failed in multi-source search")
+
+        # Convert to list
+        results = list(aggregated_results.values())
+
+        # Apply relevance scoring and ranking
+        for result in results:
+            result.relevance_score = self._calculate_relevance(result, request.query)
+
+        # Filter by minimum relevance
+        min_score = search_backend_settings.search_min_relevance_score
+        results = [r for r in results if r.relevance_score >= min_score]
+
+        # Sort by relevance score (descending)
+        results.sort(key=lambda r: r.relevance_score, reverse=True)
+
+        # Limit to top N results
+        top_n = search_backend_settings.search_default_top_results
+        results = results[:top_n]
+
+        execution_time_ms = (time.time() - start_time) * 1000
+
+        # Determine primary backend (most results contributed)
+        backend_contributions = {}
+        for result in results:
+            for backend in result.source_backends:
+                backend_contributions[backend] = backend_contributions.get(backend, 0) + 1
+
+        primary_backend = (
+            max(backend_contributions.items(), key=lambda x: x[1])[0]
+            if backend_contributions
+            else successful_backends[0]
+        )
+
+        logger.info(
+            f"Multi-source search completed: {len(results)} unique results from "
+            f"{len(successful_backends)} backends in {execution_time_ms:.0f}ms"
+        )
+
+        return SearchResponse(
+            query=request.query,
+            backend_used=primary_backend,  # Primary backend that contributed most
+            results=results,
+            total_results=len(results),
+            execution_time_ms=execution_time_ms,
+            from_cache=False,
+            cache_key=None,
+        )
+
+    async def _query_backend_safe(
+        self,
+        backend: BaseSearchBackend,
+        backend_type: SearchBackendType,
+        request: SearchRequest,
+    ) -> SearchResponse | Exception:
+        """
+        Query a backend with exception handling.
+
+        Returns:
+            SearchResponse on success, Exception on failure
+        """
+        try:
+            return await backend.search(request)
+        except Exception as e:
+            logger.debug(f"Backend {backend_type.value} query failed: {e}")
+            return e
 
     async def get_health_status(self) -> dict:
         """

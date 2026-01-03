@@ -134,6 +134,10 @@ class SearchResult(BaseModel):
         default=ContentType.UNKNOWN,
         description="Detected content type",
     )
+    source_backends: list[SearchBackendType] = Field(
+        default_factory=list,
+        description="Backends that returned this result (for multi-source attribution)",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -184,7 +188,10 @@ class SearchResponse(BaseModel):
 
     def format_for_llm(self) -> str:
         """
-        Format search results as context for LLM injection.
+        Format search results as context for LLM injection (T068).
+
+        Highlights multi-source attribution when results are found by multiple backends,
+        helping the LLM identify information that's been cross-verified.
 
         Returns markdown-formatted string with top results.
         """
@@ -195,6 +202,16 @@ class SearchResponse(BaseModel):
         for i, result in enumerate(self.results[:5], 1):
             lines.append(f"## {i}. {result.title}")
             lines.append(f"**Source**: {result.url}")
+
+            # Multi-source attribution (T068)
+            if result.source_backends:
+                backends_str = ", ".join([b.value for b in result.source_backends])
+                if len(result.source_backends) > 1:
+                    # Highlight cross-verified results
+                    lines.append(f"**✓ Verified by**: {backends_str} ({len(result.source_backends)} sources)")
+                else:
+                    lines.append(f"**Backend**: {backends_str}")
+
             if result.published_date:
                 lines.append(f"**Published**: {result.published_date.strftime('%Y-%m-%d')}")
             lines.append(f"**Relevance**: {result.relevance_score:.2f}")
