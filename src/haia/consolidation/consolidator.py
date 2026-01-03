@@ -10,8 +10,7 @@ Session 14 (US6): Memory Consolidation Lifecycle
 
 import logging
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Literal
+from datetime import UTC, datetime, timedelta
 
 from haia.consolidation.decay import DecayStrategy, ExponentialDecay
 from haia.consolidation.models import (
@@ -155,7 +154,7 @@ class MemoryConsolidator:
         Returns:
             List of consolidation decisions for SHORT_TERM memories
         """
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.short_term_days)
+        cutoff_date = datetime.now(UTC) - timedelta(days=self.short_term_days)
 
         # Query SHORT_TERM memories older than cutoff
         query = """
@@ -216,7 +215,8 @@ class MemoryConsolidator:
                     else:
                         recommended_tier = MemoryTier.SHORT_TERM
                         reasoning = (
-                            f"Priority {priority:.3f} below promotion threshold {self.promotion_threshold}. "
+                            f"Priority {priority:.3f} below promotion "
+                            f"threshold {self.promotion_threshold}. "
                             f"Keeping in SHORT_TERM."
                         )
 
@@ -310,7 +310,8 @@ class MemoryConsolidator:
                     else:
                         recommended_tier = MemoryTier.LONG_TERM
                         reasoning = (
-                            f"Priority {priority:.3f} above archival threshold {self.archival_threshold}. "
+                            f"Priority {priority:.3f} above archival "
+                            f"threshold {self.archival_threshold}. "
                             f"Keeping in LONG_TERM."
                         )
 
@@ -429,7 +430,7 @@ class MemoryConsolidator:
             ConsolidationReport with execution summary
         """
         start_time = time.time()
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
 
         logger.info("=" * 60)
         logger.info("Starting memory consolidation job...")

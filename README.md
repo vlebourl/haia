@@ -10,6 +10,8 @@ A standalone AI assistant application for homelab administration, monitoring, an
   - Dynamic LLM-generated memory types (zero hardcoded categories)
   - BM25 full-text search + embedding-based semantic retrieval
   - Context optimization with deduplication and re-ranking
+  - Three-tier lifecycle management (SHORT_TERM → LONG_TERM → ARCHIVED)
+  - Automatic theme discovery with DBSCAN clustering
   - Point-in-time queries: "What did I know on date X?"
   - Neo4j graph database for persistent memory storage
 - 💬 **OpenAI-Compatible API**: Chat interface compatible with OpenWebUI and other clients
@@ -85,6 +87,63 @@ EXTRACTION_MODEL=anthropic:claude-haiku-4-5-20251001  # LLM for extraction
 EMBEDDING_MODEL=ollama:nomic-embed-text               # Embeddings for retrieval
 NEO4J_PASSWORD=your_secure_password                    # Database password
 ```
+
+#### Memory Consolidation Lifecycle
+
+HAIA automatically manages memory tiers to prevent unbounded database growth while preserving important memories:
+
+**Three-Tier System:**
+```
+SHORT_TERM (new, <7 days) → LONG_TERM (important) → ARCHIVED (low-priority)
+```
+
+**Priority Scoring:**
+- **Access Frequency** (40%): How often the memory is retrieved
+- **Recency** (30%): How recently accessed (with decay)
+- **Confidence** (30%): Original extraction confidence
+
+**Tier Transitions:**
+- Promotion: `priority_score >= 0.7` (SHORT_TERM → LONG_TERM)
+- Archival: `priority_score < 0.2` (LONG_TERM → ARCHIVED)
+- Runs automatically daily at 3 AM (configurable)
+
+**Decay Strategies:**
+- **ExponentialDecay** (default): Adaptive half-life based on access patterns
+- **EbbinghausDecay**: Classic forgetting curve with access-based stability
+- **LinearDecay**: Simple linear decay with access multiplier
+
+📖 See [Consolidation Documentation](src/haia/consolidation/README.md) for details.
+
+#### Theme Discovery
+
+HAIA automatically discovers semantic themes in your memories using DBSCAN clustering:
+
+**Features:**
+- Automatic clustering of similar memories by embedding similarity
+- LLM-generated human-readable theme labels (3-8 words)
+- Quality validation with silhouette scores
+- Weekly automated discovery (Sundays 2 AM, configurable)
+- REST API for theme exploration
+
+**Example Themes:**
+- "Docker container orchestration and networking"
+- "Proxmox VM provisioning and HA setup"
+- "Home Assistant automation workflows"
+- "Monitoring and alerting infrastructure"
+
+**Configuration:**
+```bash
+# In .env file
+THEME_DISCOVERY_ENABLED=true
+THEME_DISCOVERY_SCHEDULE=0 2 * * 0     # Weekly Sundays at 2 AM
+THEME_LABELING_MODEL=anthropic:claude-haiku-4-5-20251001
+DBSCAN_EPS=0.3                         # Distance threshold (0.0-1.0)
+DBSCAN_MIN_SAMPLES=3                   # Minimum cluster core size
+MIN_THEME_CLUSTER_SIZE=3               # Minimum memories per theme
+MIN_SILHOUETTE_SCORE=0.5               # Quality threshold
+```
+
+📖 See [Theme Discovery Documentation](src/haia/discovery/README.md) for details.
 
 ## Architecture
 

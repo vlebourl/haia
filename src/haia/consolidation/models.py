@@ -9,7 +9,6 @@ Session 14 (US6): Memory Consolidation Lifecycle
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -62,7 +61,7 @@ class ConsolidationMetrics(BaseModel):
         ...,
         description="Current memory tier assignment"
     )
-    last_accessed: Optional[datetime] = Field(
+    last_accessed: datetime | None = Field(
         None,
         description="Timestamp of most recent access (None if never accessed)"
     )
@@ -121,7 +120,7 @@ class ConsolidationDecision(BaseModel):
         le=1.0,
         description="Threshold used for decision (promotion: 0.7, archival: 0.2)"
     )
-    metrics: Optional[ConsolidationMetrics] = Field(
+    metrics: ConsolidationMetrics | None = Field(
         None,
         description="Detailed metrics used in priority calculation"
     )
@@ -133,7 +132,11 @@ class ConsolidationDecision(BaseModel):
                 "current_tier": "short_term",
                 "recommended_tier": "long_term",
                 "priority_score": 0.78,
-                "reasoning": "High access frequency (12 retrievals) and recent usage (last accessed 2 days ago) indicate important memory. Priority 0.78 exceeds promotion threshold 0.7.",
+                "reasoning": (
+                    "High access frequency (12 retrievals) and recent usage "
+                    "(last accessed 2 days ago) indicate important memory. "
+                    "Priority 0.78 exceeds promotion threshold 0.7."
+                ),
                 "threshold": 0.7
             }
         }
@@ -196,12 +199,13 @@ class ConsolidationReport(BaseModel):
 
     def summary(self) -> str:
         """Generate human-readable summary of consolidation run."""
+        unchanged_pct = 100 - self.promotion_rate - self.archival_rate
         return (
             f"Consolidation Report ({self.timestamp.isoformat()}):\n"
             f"  Processed: {self.processed_count} memories\n"
             f"  Promoted:  {self.promoted_count} ({self.promotion_rate:.1f}%)\n"
             f"  Archived:  {self.archived_count} ({self.archival_rate:.1f}%)\n"
-            f"  Unchanged: {self.unchanged_count} ({100 - self.promotion_rate - self.archival_rate:.1f}%)\n"
+            f"  Unchanged: {self.unchanged_count} ({unchanged_pct:.1f}%)\n"
             f"  Execution: {self.execution_time_ms:.0f}ms"
         )
 

@@ -10,7 +10,7 @@ Session 14 (US6): Memory Consolidation Lifecycle
 import logging
 import math
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +61,11 @@ class DecayStrategy(ABC):
             Days elapsed since last access/creation
         """
         reference_time = last_accessed if last_accessed else created_at
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Ensure reference_time is timezone-aware
         if reference_time.tzinfo is None:
-            reference_time = reference_time.replace(tzinfo=timezone.utc)
+            reference_time = reference_time.replace(tzinfo=UTC)
 
         delta = now - reference_time
         return delta.total_seconds() / 86400.0  # Convert to days

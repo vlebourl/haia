@@ -9,9 +9,8 @@ Session 14 (US7): Theme Discovery
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ClusterStatus(str, Enum):
@@ -33,7 +32,10 @@ class Theme(BaseModel):
         "example": {
             "theme_id": "theme_abc123",
             "label": "Docker container management preferences",
-            "description": "User preferences for Docker container orchestration, networking, and deployment strategies",
+            "description": (
+                "User preferences for Docker container orchestration, "
+                "networking, and deployment strategies"
+            ),
             "cluster_id": 2,
             "memory_count": 12,
             "silhouette_score": 0.68,
@@ -68,7 +70,7 @@ class Theme(BaseModel):
         ge=0,
         description="Number of memories in this theme cluster"
     )
-    silhouette_score: Optional[float] = Field(
+    silhouette_score: float | None = Field(
         None,
         ge=-1.0,
         le=1.0,
@@ -172,19 +174,19 @@ class ClusteringReport(BaseModel):
         ge=0,
         description="Number of memories that didn't fit any cluster (noise)"
     )
-    avg_silhouette_score: Optional[float] = Field(
+    avg_silhouette_score: float | None = Field(
         None,
         ge=-1.0,
         le=1.0,
         description="Average silhouette score across all clusters"
     )
-    min_silhouette_score: Optional[float] = Field(
+    min_silhouette_score: float | None = Field(
         None,
         ge=-1.0,
         le=1.0,
         description="Minimum silhouette score among clusters"
     )
-    max_silhouette_score: Optional[float] = Field(
+    max_silhouette_score: float | None = Field(
         None,
         ge=-1.0,
         le=1.0,
@@ -203,11 +205,14 @@ class ClusteringReport(BaseModel):
     def summary(self) -> str:
         """Generate human-readable summary of clustering run."""
         avg_score = f"{self.avg_silhouette_score:.2f}" if self.avg_silhouette_score else "N/A"
+        outlier_pct = (
+            self.outliers_count / max(1, self.memories_analyzed) * 100
+        )
         return (
             f"Theme Discovery Report ({self.timestamp.isoformat()}):\n"
             f"  Analyzed:   {self.memories_analyzed} memories\n"
             f"  Discovered: {self.themes_discovered} themes\n"
-            f"  Outliers:   {self.outliers_count} ({self.outliers_count/max(1, self.memories_analyzed)*100:.1f}%)\n"
+            f"  Outliers:   {self.outliers_count} ({outlier_pct:.1f}%)\n"
             f"  Quality:    {avg_score} avg silhouette score\n"
             f"  Execution:  {self.execution_time_ms:.0f}ms"
         )
@@ -243,7 +248,7 @@ class MemoryClusterAssignment(BaseModel):
         ge=-1,
         description="DBSCAN cluster ID (-1 = outlier)"
     )
-    distance_to_centroid: Optional[float] = Field(
+    distance_to_centroid: float | None = Field(
         None,
         ge=0.0,
         description="Distance from memory to cluster centroid (cosine distance)"

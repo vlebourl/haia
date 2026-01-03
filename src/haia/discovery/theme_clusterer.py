@@ -9,8 +9,7 @@ Session 14 (US7): Theme Discovery
 
 import logging
 import time
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import numpy as np
@@ -46,7 +45,7 @@ class ThemeClusterer:
         self,
         neo4j_service: Neo4jService,
         labeling_model: str = "anthropic:claude-haiku-4-5-20251001",
-        config: Optional[ClusteringConfig] = None,
+        config: ClusteringConfig | None = None,
     ):
         """
         Initialize Theme Clusterer.
@@ -183,11 +182,6 @@ class ThemeClusterer:
             logger.warning("Insufficient data for silhouette score calculation")
             return {}
 
-        # Calculate silhouette score per sample
-        silhouette_values = silhouette_score(
-            embeddings, cluster_labels, metric=self.config.metric, sample_size=min(1000, len(embeddings))
-        )
-
         # Group by cluster
         cluster_scores = {}
         unique_clusters = set(cluster_labels)
@@ -205,7 +199,11 @@ class ThemeClusterer:
                 metric=self.config.metric,
             ) if np.sum(cluster_mask) >= 2 else 0.0
 
-            cluster_scores[cluster_id] = float(cluster_silhouettes) if isinstance(cluster_silhouettes, (int, float, np.number)) else 0.0
+            # Convert to float, handling numpy types
+            if isinstance(cluster_silhouettes, (int, float, np.number)):
+                cluster_scores[cluster_id] = float(cluster_silhouettes)
+            else:
+                cluster_scores[cluster_id] = 0.0
 
         logger.debug(f"Silhouette scores calculated for {len(cluster_scores)} clusters")
 
@@ -379,7 +377,7 @@ DESCRIPTION: <your description>
             ClusteringReport with execution summary
         """
         start_time = time.time()
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
 
         logger.info("=" * 60)
         logger.info("Starting theme discovery clustering job...")
@@ -391,7 +389,8 @@ DESCRIPTION: <your description>
 
             if len(memories) < self.config.min_cluster_size:
                 logger.warning(
-                    f"Insufficient memories for clustering: {len(memories)} < {self.config.min_cluster_size}"
+                    f"Insufficient memories for clustering: {len(memories)} < "
+                    f"{self.config.min_cluster_size}"
                 )
                 execution_time_ms = (time.time() - start_time) * 1000
                 return ClusteringReport(
@@ -447,7 +446,8 @@ DESCRIPTION: <your description>
                 # Skip low-quality clusters
                 if silhouette is not None and silhouette < self.config.min_silhouette_score:
                     logger.debug(
-                        f"Skipping cluster {cluster_id}: silhouette {silhouette:.2f} < {self.config.min_silhouette_score}"
+                        f"Skipping cluster {cluster_id}: silhouette {silhouette:.2f} "
+                        f"< {self.config.min_silhouette_score}"
                     )
                     continue
 
