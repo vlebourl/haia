@@ -137,6 +137,8 @@ class MemoryStorageService:
             content: $content,
             confidence: $confidence,
             category: $category,
+            source_conversation_id: $conversation_id,
+            extraction_timestamp: datetime($extraction_time),
             created_at: datetime($extraction_time),
             // Session 10: Temporal properties
             valid_from: datetime($valid_from),
