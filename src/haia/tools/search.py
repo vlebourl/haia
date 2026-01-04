@@ -208,6 +208,7 @@ async def web_search(
         # Create search request
         request = SearchRequest(
             query=query,
+            backend_preference=None,  # Use selector's automatic backend selection
             max_results=min(max_results, search_backend_settings.search_default_max_results),
             use_cache=True,
             allowed_domains=allowed_domains,

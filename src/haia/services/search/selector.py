@@ -4,6 +4,7 @@ Backend selection and failover logic for web search.
 Provides automatic backend selection, failover, and result processing
 with relevance scoring and ranking.
 """
+from typing import Any
 
 import asyncio
 import logging
@@ -61,7 +62,7 @@ class SearchBackendSelector:
         self,
         cache: SearchCacheService | None = None,
         metrics: SearchMetricsService | None = None,
-    ):
+    ) -> None:
         """
         Initialize backend selector.
 
@@ -493,9 +494,10 @@ class SearchBackendSelector:
 
                         # Keep the result with higher backend_score if available
                         if result.backend_score is not None:
+                            existing_score = aggregated_results[url].backend_score
                             if (
-                                aggregated_results[url].backend_score is None
-                                or result.backend_score > aggregated_results[url].backend_score
+                                existing_score is None
+                                or result.backend_score > existing_score
                             ):
                                 aggregated_results[url].backend_score = result.backend_score
                     else:
@@ -527,16 +529,17 @@ class SearchBackendSelector:
         execution_time_ms = (time.time() - start_time) * 1000
 
         # Determine primary backend (most results contributed)
-        backend_contributions = {}
+        backend_contributions: dict[SearchBackendType, int] = {}
         for result in results:
-            for backend in result.source_backends:
-                backend_contributions[backend] = backend_contributions.get(backend, 0) + 1
+            for backend_type in result.source_backends:
+                backend_contributions[backend_type] = backend_contributions.get(backend_type, 0) + 1
 
-        primary_backend = (
-            max(backend_contributions.items(), key=lambda x: x[1])[0]
-            if backend_contributions
-            else successful_backends[0]
-        )
+        # Determine which backend contributed the most results
+        if backend_contributions:
+            primary_backend_entry = max(backend_contributions.items(), key=lambda x: x[1])
+            primary_backend: SearchBackendType = primary_backend_entry[0]
+        else:
+            primary_backend = successful_backends[0]  # First successful backend
 
         logger.info(
             f"Multi-source search completed: {len(results)} unique results from "
@@ -571,7 +574,7 @@ class SearchBackendSelector:
             logger.debug(f"Backend {backend_type.value} query failed: {e}")
             return e
 
-    async def get_health_status(self) -> dict:
+    async def get_health_status(self) -> dict[str, Any]:
         """
         Get health status of all backends.
 

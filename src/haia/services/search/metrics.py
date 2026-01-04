@@ -101,7 +101,7 @@ class SearchMetricsService:
     - Persistent storage (JSON file)
     """
 
-    def __init__(self, storage_path: Path | None = None):
+    def __init__(self, storage_path: Path | None = None) -> None:
         """
         Initialize metrics service.
 
@@ -167,7 +167,7 @@ class SearchMetricsService:
         # Create new monthly metrics
         return MonthlyMetrics(month=this_month)
 
-    def _save_metrics(self):
+    def _save_metrics(self) -> None:
         """Persist metrics to storage."""
         try:
             data = {
@@ -187,7 +187,7 @@ class SearchMetricsService:
         backend: SearchBackendType,
         from_cache: bool = False,
         error: bool = False,
-    ):
+    ) -> None:
         """
         Record a search query (T069-T070).
 
@@ -253,13 +253,16 @@ class SearchMetricsService:
         # Check budget alerts (T072)
         self._check_budget_alerts()
 
-    def _check_budget_alerts(self):
+    def _check_budget_alerts(self) -> list[BudgetAlert]:
         """
         Check if budget thresholds have been exceeded (T072).
 
         Alerts at 80% (warning) and 95% (critical) of daily/monthly budgets.
+
+        Returns:
+            List of budget alerts (empty if no thresholds exceeded)
         """
-        alerts = []
+        alerts: list[BudgetAlert] = []
 
         # Daily budget check
         daily_budget = search_backend_settings.search_daily_budget_usd

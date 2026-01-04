@@ -4,6 +4,7 @@ Search result caching service.
 Provides in-memory LRU cache with TTL expiration and configurable strategies
 for different query types (general, version, security).
 """
+from typing import Any
 
 import asyncio
 import logging
@@ -33,7 +34,7 @@ class SearchCacheService:
         self,
         max_size: int = 1000,
         default_ttl: int | None = None,
-    ):
+    ) -> None:
         """
         Initialize search cache.
 
@@ -102,7 +103,7 @@ class SearchCacheService:
         query: str,
         backend: SearchBackendType,
         response: SearchResponse,
-    ):
+    ) -> None:
         """
         Store search result in cache with appropriate TTL.
 
@@ -138,7 +139,7 @@ class SearchCacheService:
 
             logger.debug(f"Cached: {cache_key} (TTL: {ttl}s)")
 
-    async def invalidate(self, query: str, backend: SearchBackendType | None = None):
+    async def invalidate(self, query: str, backend: SearchBackendType | None = None) -> None:
         """
         Invalidate cached result for a specific query.
 
@@ -162,14 +163,14 @@ class SearchCacheService:
                     del self._cache[key]
                     logger.info(f"Invalidated cache: {key}")
 
-    async def clear(self):
+    async def clear(self) -> None:
         """Clear all cached results."""
         async with self._lock:
             count = len(self._cache)
             self._cache.clear()
             logger.info(f"Cache cleared: {count} entries removed")
 
-    async def get_stats(self) -> dict:
+    async def get_stats(self) -> dict[str, Any]:
         """
         Get cache statistics.
 
@@ -231,7 +232,7 @@ class SearchCacheService:
         # Default TTL
         return self.default_ttl
 
-    async def cleanup_expired(self):
+    async def cleanup_expired(self) -> None:
         """Remove all expired entries from cache (maintenance task)."""
         async with self._lock:
             before_count = len(self._cache)

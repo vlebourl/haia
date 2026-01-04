@@ -4,6 +4,7 @@ Brave Search API client implementation.
 Provides async client for Brave Search API with rate limiting and error handling.
 High-quality search results optimized for technical content.
 """
+from typing import Any
 
 import asyncio
 import logging
@@ -40,18 +41,14 @@ class BraveSearchClient(BaseSearchBackend):
     API Documentation: https://brave.com/search/api/
     """
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None) -> None:
         """
         Initialize Brave Search client.
 
         Args:
             api_key: Brave Search API key (defaults to config if not provided)
         """
-        self.api_key = api_key or (
-            search_backend_settings.brave_api_key.get_secret_value()
-            if search_backend_settings.brave_api_key
-            else None
-        )
+        self.api_key = api_key or search_backend_settings.brave_api_key
         self.endpoint = "https://api.search.brave.com/res/v1/web/search"
         self.timeout = search_backend_settings.search_request_timeout_seconds
 
@@ -94,7 +91,7 @@ class BraveSearchClient(BaseSearchBackend):
         await self._apply_rate_limit()
 
         # Build query parameters
-        params = {
+        params: dict[str, str | int] = {
             "q": request.query,
             "count": request.max_results,
         }
@@ -170,7 +167,7 @@ class BraveSearchClient(BaseSearchBackend):
             cache_key=None,
         )
 
-    def _parse_results(self, data: dict, request: SearchRequest) -> list[SearchResult]:
+    def _parse_results(self, data: dict[str, Any], request: SearchRequest) -> list[SearchResult]:
         """
         Parse Brave API response into SearchResult models.
 
@@ -221,7 +218,7 @@ class BraveSearchClient(BaseSearchBackend):
 
         return results
 
-    async def _apply_rate_limit(self):
+    async def _apply_rate_limit(self) -> None:
         """
         Apply rate limiting to prevent exceeding API limits.
 

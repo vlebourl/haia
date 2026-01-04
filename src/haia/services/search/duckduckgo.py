@@ -4,6 +4,7 @@ DuckDuckGo search client implementation.
 Provides async wrapper for duckduckgo-search library with exponential backoff.
 Free search backend with no API key required.
 """
+from typing import Any
 
 import asyncio
 import logging
@@ -40,7 +41,7 @@ class DuckDuckGoClient(BaseSearchBackend):
     for async compatibility.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize DuckDuckGo search client."""
         self.timeout = search_backend_settings.search_request_timeout_seconds
         self.max_retries = 3
@@ -116,7 +117,7 @@ class DuckDuckGoClient(BaseSearchBackend):
         query: str,
         max_results: int,
         timelimit: str | None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """
         Execute search with exponential backoff retry logic.
 
@@ -176,7 +177,7 @@ class DuckDuckGoClient(BaseSearchBackend):
         query: str,
         max_results: int,
         timelimit: str | None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """
         Synchronous search implementation (runs in thread pool).
 
@@ -200,7 +201,7 @@ class DuckDuckGoClient(BaseSearchBackend):
             )
             return results
 
-    def _parse_results(self, data: list[dict], request: SearchRequest) -> list[SearchResult]:
+    def _parse_results(self, data: list[dict[str, Any]], request: SearchRequest) -> list[SearchResult]:
         """
         Parse DuckDuckGo results into SearchResult models.
 
@@ -253,7 +254,7 @@ class DuckDuckGoClient(BaseSearchBackend):
 
         return results
 
-    async def _apply_rate_limit(self):
+    async def _apply_rate_limit(self) -> None:
         """
         Apply conservative rate limiting to avoid blocks.
 

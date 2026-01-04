@@ -7,6 +7,7 @@ Google CSE is expensive and used as a last resort fallback.
 Free tier: 100 queries/day
 Paid tier: $5 per 1000 queries
 """
+from typing import Any
 
 import asyncio
 import logging
@@ -45,7 +46,7 @@ class DailyUsageTracker:
     Uses simple file-based persistence to track queries across restarts.
     """
 
-    def __init__(self, limit: int = 100):
+    def __init__(self, limit: int = 100) -> None:
         """
         Initialize usage tracker.
 
@@ -57,7 +58,7 @@ class DailyUsageTracker:
         self.usage_file.parent.mkdir(parents=True, exist_ok=True)
         self._load_usage()
 
-    def _load_usage(self):
+    def _load_usage(self) -> None:
         """Load usage data from file."""
         self.today = datetime.now(UTC).date()
         self.count = 0
@@ -77,7 +78,7 @@ class DailyUsageTracker:
             except Exception as e:
                 logger.warning(f"Failed to load usage data: {e}")
 
-    def _save_usage(self):
+    def _save_usage(self) -> None:
         """Save usage data to file."""
         try:
             with open(self.usage_file, "w") as f:
@@ -100,13 +101,13 @@ class DailyUsageTracker:
 
         return self.count < self.limit
 
-    def increment(self):
+    def increment(self) -> None:
         """Record a query being made."""
         self.count += 1
         self._save_usage()
         logger.debug(f"Google CSE usage: {self.count}/{self.limit}")
 
-    def get_usage(self) -> dict:
+    def get_usage(self) -> dict[str, Any]:
         """
         Get current usage statistics.
 
@@ -147,7 +148,7 @@ class GoogleCSEClient(BaseSearchBackend):
         api_key: str | None = None,
         engine_id: str | None = None,
         daily_limit: int = 100,
-    ):
+    ) -> None:
         """
         Initialize Google CSE client.
 
@@ -156,11 +157,7 @@ class GoogleCSEClient(BaseSearchBackend):
             engine_id: Custom Search Engine ID (CX parameter)
             daily_limit: Daily query limit (default: 100 for free tier)
         """
-        self.api_key = api_key or (
-            search_backend_settings.google_cse_api_key.get_secret_value()
-            if search_backend_settings.google_cse_api_key
-            else None
-        )
+        self.api_key = api_key or search_backend_settings.google_cse_api_key
         self.engine_id = engine_id or search_backend_settings.google_cse_engine_id
         self.endpoint = "https://www.googleapis.com/customsearch/v1"
         self.timeout = search_backend_settings.search_request_timeout_seconds
@@ -225,7 +222,7 @@ class GoogleCSEClient(BaseSearchBackend):
         await self._apply_rate_limit()
 
         # Build query parameters
-        params = {
+        params: dict[str, str | int | None] = {
             "key": self.api_key,
             "cx": self.engine_id,
             "q": request.query,
@@ -308,7 +305,7 @@ class GoogleCSEClient(BaseSearchBackend):
             cache_key=None,
         )
 
-    def _parse_results(self, data: dict, request: SearchRequest) -> list[SearchResult]:
+    def _parse_results(self, data: dict[str, Any], request: SearchRequest) -> list[SearchResult]:
         """
         Parse Google CSE API response into SearchResult models.
 
@@ -373,7 +370,7 @@ class GoogleCSEClient(BaseSearchBackend):
 
         return results
 
-    async def _apply_rate_limit(self):
+    async def _apply_rate_limit(self) -> None:
         """
         Apply rate limiting to prevent exceeding API limits.
 
@@ -417,7 +414,7 @@ class GoogleCSEClient(BaseSearchBackend):
         except Exception:
             return False
 
-    def get_daily_usage(self) -> dict:
+    def get_daily_usage(self) -> dict[str, Any]:
         """
         Get current daily usage statistics.
 

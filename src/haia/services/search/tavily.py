@@ -5,6 +5,7 @@ Provides async client for Tavily Search API with AI-optimized search results.
 Tavily is specifically designed for LLM applications with relevance scoring
 and content extraction.
 """
+from typing import Any
 
 import asyncio
 import logging
@@ -47,7 +48,7 @@ class TavilySearchClient(BaseSearchBackend):
     - Source attribution
     """
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None) -> None:
         """
         Initialize Tavily Search client.
 
@@ -176,7 +177,7 @@ class TavilySearchClient(BaseSearchBackend):
             cache_key=None,
         )
 
-    def _parse_results(self, data: dict, request: SearchRequest) -> list[SearchResult]:
+    def _parse_results(self, data: dict[str, Any], request: SearchRequest) -> list[SearchResult]:
         """
         Parse Tavily API response into SearchResult models.
 
@@ -228,7 +229,7 @@ class TavilySearchClient(BaseSearchBackend):
 
         return results
 
-    async def _apply_rate_limit(self):
+    async def _apply_rate_limit(self) -> None:
         """
         Apply rate limiting to prevent exceeding API limits.
 
