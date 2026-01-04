@@ -3,6 +3,7 @@
 import logging
 
 from pydantic_ai import Agent
+from pydantic_ai.models.anthropic import AnthropicModelSettings
 
 from haia.config import search_backend_settings, settings
 from haia.profile import load_profile_context
@@ -61,11 +62,23 @@ def create_agent(model_name: str) -> Agent:
 
         PydanticAI has native support for Anthropic and Ollama models.
         Pass the model string directly and PydanticAI will handle initialization.
+
+        Thinking mode is enabled for Anthropic models to capture reasoning steps.
     """
     system_prompt = build_system_prompt()
+
+    # Enable thinking mode for Anthropic models to capture reasoning
+    model_settings = None
+    if model_name.startswith("anthropic:"):
+        model_settings = AnthropicModelSettings(
+            anthropic_thinking={"type": "enabled", "budget_tokens": 2000}
+        )
+        logger.info("Thinking mode enabled for Anthropic model (budget: 2000 tokens)")
+
     agent = Agent(
         model=model_name,
         system_prompt=system_prompt,
+        model_settings=model_settings,
     )
 
     # Register web search tool if enabled
