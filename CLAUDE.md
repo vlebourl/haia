@@ -243,6 +243,8 @@ All configuration managed through `pydantic-settings` with environment variables
 - Neo4j 5.15+ with vector index, BM25 fulltext index, and graph relationships (011-hybrid-retrieval)
 - Python 3.11+ + httpx (async HTTP), PydanticAI @agent.tool integration, duckduckgo-search library (012-web-search)
 - Multi-backend search: Brave Search API, DuckDuckGo, Tavily (AI-optimized), Google CSE with automatic failover (012-web-search)
+- Python 3.11+ (existing project standard) + PydanticAI 1.25.1+, FastAPI (existing), httpx (async HTTP) (013-streaming-tool-status)
+- N/A (stateless streaming response modification) (013-streaming-tool-status)
 
 ### Memory System (006-docker-neo4j-stack)
 - **Neo4j 5.15 Graph Database** with async Python driver (`neo4j` package)
