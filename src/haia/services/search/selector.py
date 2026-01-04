@@ -100,7 +100,7 @@ class SearchBackendSelector:
         Returns:
             List of SearchBackendType in priority order
         """
-        priority_str = search_backend_settings.search_backend_priority
+        priority_str = search_backend_settings.backend_priority
         priority_list = [p.strip() for p in priority_str.split(",")]
 
         order = []

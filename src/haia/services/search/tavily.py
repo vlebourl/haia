@@ -54,11 +54,7 @@ class TavilySearchClient(BaseSearchBackend):
         Args:
             api_key: Tavily API key (defaults to config if not provided)
         """
-        self.api_key = api_key or (
-            search_backend_settings.tavily_api_key.get_secret_value()
-            if search_backend_settings.tavily_api_key
-            else None
-        )
+        self.api_key = api_key or search_backend_settings.tavily_api_key
         self.endpoint = "https://api.tavily.com/search"
         self.timeout = search_backend_settings.search_request_timeout_seconds
 

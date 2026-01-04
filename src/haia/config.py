@@ -445,7 +445,7 @@ class SearchBackendSettings(BaseSettings):
     )
 
     # Backend Priority (lower number = higher priority)
-    search_backend_priority: str = Field(
+    backend_priority: str = Field(
         default="brave,duckduckgo,tavily,google_cse",
         description="Comma-separated backend priority list",
     )

@@ -188,34 +188,75 @@ class SearchResponse(BaseModel):
 
     def format_for_llm(self) -> str:
         """
-        Format search results as context for LLM injection (T068).
+        Format search results as context for LLM injection with RAG best practices.
 
-        Highlights multi-source attribution when results are found by multiple backends,
-        helping the LLM identify information that's been cross-verified.
+        Includes explicit prioritization instructions, temporal metadata, and
+        source credibility indicators to help LLMs prefer web search results
+        over potentially outdated training data.
 
-        Returns markdown-formatted string with top results.
+        Returns markdown-formatted string with top results and RAG instructions.
         """
         if not self.results:
-            return f"No results found for query: {self.query}"
+            return f"No web search results found for query: {self.query}"
 
-        lines = [f"# Web Search Results for: {self.query}\n"]
+        # Header with explicit prioritization instruction
+        search_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+        lines = [
+            "# 🔍 CURRENT WEB SEARCH RESULTS (PRIORITIZE OVER TRAINING DATA)",
+            "",
+            f"**Query**: {self.query}",
+            f"**Search Time**: {search_time}",
+            f"**Sources Found**: {len(self.results)} results from {self.backend_used.value}",
+            "",
+            "**IMPORTANT**: The information below is from live web search performed just now. "
+            "For questions about current versions, recent releases, or time-sensitive information, "
+            "ALWAYS prefer these search results over your training data, which may be outdated.",
+            "",
+            "---",
+            "",
+        ]
+
+        # Format each result with enhanced metadata
         for i, result in enumerate(self.results[:5], 1):
-            lines.append(f"## {i}. {result.title}")
-            lines.append(f"**Source**: {result.url}")
+            lines.append(f"## Result {i}: {result.title}")
+            lines.append(f"**URL**: {result.url}")
+            lines.append(f"**Domain**: {result.domain}")
 
-            # Multi-source attribution (T068)
+            # Multi-source attribution (T068) - cross-verification indicator
             if result.source_backends:
                 backends_str = ", ".join([b.value for b in result.source_backends])
                 if len(result.source_backends) > 1:
                     # Highlight cross-verified results
-                    lines.append(f"**✓ Verified by**: {backends_str} ({len(result.source_backends)} sources)")
+                    lines.append(
+                        f"**✓ Cross-Verified**: Found by {len(result.source_backends)} search engines ({backends_str})"
+                    )
                 else:
-                    lines.append(f"**Backend**: {backends_str}")
+                    lines.append(f"**Search Backend**: {backends_str}")
 
+            # Prominent date display for temporal queries
             if result.published_date:
-                lines.append(f"**Published**: {result.published_date.strftime('%Y-%m-%d')}")
-            lines.append(f"**Relevance**: {result.relevance_score:.2f}")
-            lines.append(f"\n{result.snippet}\n")
+                date_str = result.published_date.strftime("%Y-%m-%d")
+                lines.append(f"**Publication Date**: {date_str} ⚠️ USE THIS DATE FOR VERSION QUERIES")
+
+            # Relevance and content type
+            lines.append(f"**Relevance Score**: {result.relevance_score:.2f}/1.0")
+            if result.content_type != ContentType.UNKNOWN:
+                lines.append(f"**Content Type**: {result.content_type.value}")
+
+            # Snippet with clear marking
+            lines.append("")
+            lines.append("**Content Summary**:")
+            lines.append(f"{result.snippet}")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+
+        # Footer with usage reminder
+        lines.append("**Search Result Usage Guide**:")
+        lines.append("- These results are from live web search, NOT from your training data")
+        lines.append("- For version numbers, release dates, and current information: TRUST THESE SOURCES")
+        lines.append("- Cross-verified results (marked with ✓) are found by multiple search engines")
+        lines.append("- Always cite the specific source URL when using information from these results")
 
         return "\n".join(lines)
 
