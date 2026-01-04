@@ -229,13 +229,13 @@ class MemoryStorageService:
 
         # Cypher query to update memory with embedding
         query = """
-        MATCH (m:Memory {id: $memory_id})
+        MATCH (m:Memory {memory_id: $memory_id})
         SET
             m.embedding = $embedding,
             m.has_embedding = $has_embedding,
             m.embedding_version = $embedding_version,
             m.embedding_updated_at = datetime()
-        RETURN m.id as memory_id
+        RETURN m.memory_id as memory_id
         """
 
         params = {
