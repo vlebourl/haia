@@ -160,6 +160,38 @@ class Neo4jService:
             )
             return False
 
+    async def execute_write(self, query: str, params: dict[str, Any] = None) -> Any:
+        """Execute a write query with parameters.
+
+        Generic method for executing custom Cypher write queries.
+        Used by services that need to run complex queries not covered by specific methods.
+
+        Args:
+            query: Cypher query string
+            params: Query parameters dictionary
+
+        Returns:
+            Query result (typically the single record or None)
+
+        Raises:
+            Exception: If query execution fails
+        """
+        if not self.driver:
+            logger.error("Cannot execute write: Driver not initialized")
+            return None
+
+        async def _write_tx(tx: Any, q: str, p: dict[str, Any]) -> Any:
+            result = await tx.run(q, **(p or {}))
+            record = await result.single()
+            return record
+
+        try:
+            async with self.driver.session() as session:
+                return await session.execute_write(_write_tx, query, params or {})
+        except Exception as e:
+            logger.error(f"Failed to execute write query: {e}", exc_info=True)
+            raise
+
     async def create_node(
         self, label: str, properties: dict[str, Any]
     ) -> Optional[str]:

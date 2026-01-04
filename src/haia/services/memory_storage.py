@@ -132,8 +132,8 @@ class MemoryStorageService:
 
         // Create memory node
         CREATE (m:Memory {
-            id: $memory_id,
-            type: $memory_type,
+            memory_id: $memory_id,
+            memory_type: $memory_type,
             content: $content,
             confidence: $confidence,
             category: $category,
@@ -154,7 +154,7 @@ class MemoryStorageService:
         // Store metadata as separate properties
         SET m += $metadata
 
-        RETURN m.id as memory_id
+        RETURN m.memory_id as memory_id
         """
 
         params = {

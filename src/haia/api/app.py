@@ -73,6 +73,20 @@ async def lifespan(app: FastAPI):
     set_neo4j_service(neo4j_service)
     logger.info("Neo4j connection established")
 
+    # Create vector index for memory embeddings (Session 8 - Memory Retrieval)
+    # This enables semantic search over memory nodes
+    try:
+        await neo4j_service.create_vector_index(
+            index_name="memory_embeddings",
+            node_label="Memory",
+            property_name="embedding",
+            dimensions=settings.embedding_dim,  # 768 for text-embedding-004
+            similarity_function="cosine",
+        )
+        logger.info(f"Vector index 'memory_embeddings' ready (dim={settings.embedding_dim})")
+    except Exception as e:
+        logger.warning(f"Failed to create vector index (may already exist): {e}")
+
     # Initialize embedding client and retrieval service (Session 8 - Memory Retrieval)
     # Supports Google (API, works on GTX 1080) or Ollama (local, requires RTX GPU)
     # Graceful degradation: If unavailable, skip retrieval (conversations still work)
