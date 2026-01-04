@@ -204,11 +204,12 @@ async def lifespan(app: FastAPI):
         f"Initializing conversation tracker (storage: {settings.transcript_storage_dir})"
     )
 
-    # Inject ollama_client if available (for Session 8 embedding generation)
-    tracker_ollama_client = None
-    if "ollama_client" in locals() and ollama_client is not None:
-        tracker_ollama_client = ollama_client
-        logger.info("Embedding generation enabled for memory extraction")
+    # Inject embedding_client if available (for Session 8 embedding generation)
+    # Works with both Google (GoogleEmbeddingAdapter) and Ollama (OllamaClient)
+    tracker_embedding_client = None
+    if "embedding_client" in locals() and embedding_client is not None:
+        tracker_embedding_client = embedding_client
+        logger.info(f"Embedding generation enabled for memory extraction (provider: {settings.embedding_provider})")
 
     tracker = ConversationTracker(
         storage_dir=settings.transcript_storage_dir,
@@ -217,21 +218,22 @@ async def lifespan(app: FastAPI):
         max_tracked_conversations=settings.boundary_max_tracked_conversations,
         extraction_service=extraction_service,
         memory_storage_service=memory_storage_service,
-        ollama_client=tracker_ollama_client,
+        ollama_client=tracker_embedding_client,  # Parameter name is "ollama_client" for backwards compat
         embedding_version=settings.embedding_model.split(":")[-1] + "-v1",
     )
     set_conversation_tracker(tracker)
 
     # Initialize backfill worker for existing memories without embeddings (Session 8)
+    # Works with both Google (GoogleEmbeddingAdapter) and Ollama (OllamaClient)
     backfill_task = None
-    if tracker_ollama_client:
+    if tracker_embedding_client:
         try:
             from haia.embedding.backfill_worker import EmbeddingBackfillWorker
 
-            logger.info("Initializing embedding backfill worker")
+            logger.info(f"Initializing embedding backfill worker (provider: {settings.embedding_provider})")
             backfill_worker = EmbeddingBackfillWorker(
                 neo4j_service=neo4j_service,
-                ollama_client=tracker_ollama_client,
+                ollama_client=tracker_embedding_client,  # Parameter name is "ollama_client" for backwards compat
                 memory_storage=memory_storage_service,
                 batch_size=25,
                 max_workers=2,
@@ -241,7 +243,7 @@ async def lifespan(app: FastAPI):
 
             # Launch backfill worker in background (non-blocking)
             backfill_task = asyncio.create_task(backfill_worker.start())
-            logger.info("Backfill worker started in background")
+            logger.info(f"Backfill worker started in background (provider: {settings.embedding_provider})")
 
         except Exception as e:
             logger.warning(
