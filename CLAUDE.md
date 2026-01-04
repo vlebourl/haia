@@ -241,6 +241,10 @@ All configuration managed through `pydantic-settings` with environment variables
 - Neo4j 5.15+ graph database with vector index (existing from Session 6-8) (009-context-optimization)
 - Python 3.11+ + neo4j (async driver with APOC support), asyncio (parallel execution) (011-hybrid-retrieval)
 - Neo4j 5.15+ with vector index, BM25 fulltext index, and graph relationships (011-hybrid-retrieval)
+- Python 3.11+ + httpx (async HTTP), PydanticAI @agent.tool integration, duckduckgo-search library (012-web-search)
+- Multi-backend search: Brave Search API, DuckDuckGo, Tavily (AI-optimized), Google CSE with automatic failover (012-web-search)
+- Python 3.11+ (existing project standard) + PydanticAI 1.25.1+, FastAPI (existing), httpx (async HTTP) (013-streaming-tool-status)
+- N/A (stateless streaming response modification) (013-streaming-tool-status)
 
 ### Memory System (006-docker-neo4j-stack)
 - **Neo4j 5.15 Graph Database** with async Python driver (`neo4j` package)
@@ -337,12 +341,69 @@ All configuration managed through `pydantic-settings` with environment variables
     -d '{"messages": [...], "metadata": {"hybrid_mode": true}}'
   ```
 
+### Web Search Integration (012-web-search)
+- **Multi-Backend Search**: Brave Search API, DuckDuckGo, Tavily (AI-optimized), Google Custom Search Engine
+  - Automatic failover with priority ordering
+  - Parallel multi-source queries for cross-verification
+  - Rate limiting and cost tracking per backend
+
+- **Search Orchestration** (`src/haia/services/search/selector.py`)
+  - Priority-based backend selection with automatic failover
+  - LRU cache with TTL (default: 24 hours, in-memory or Redis)
+  - Relevance scoring (domain reputation + documentation bonus + recency + keywords)
+  - Multi-source aggregation with source attribution
+
+- **Cost Management** (`src/haia/services/search/metrics.py`)
+  - Per-backend query counters and cost calculation
+  - Daily/monthly budget tracking with alerts (80% warning, 95% critical)
+  - Cache hit/miss tracking with hit rate calculation
+  - Persistent JSON storage: `~/.haia/search_metrics.json`
+  - Metrics API: `GET /search/metrics`
+
+- **PydanticAI Tool Integration** (`src/haia/tools/search.py`)
+  - `web_search(query, max_results)` - Autonomous agent tool
+  - Intent detection patterns (version queries, errors, documentation, time-sensitive)
+  - Documentation query detection with automatic domain whitelisting
+  - Formatted markdown results with source attribution
+
+- **Configuration** (`.env`):
+  - `SEARCH_ENABLED=true` - Feature toggle
+  - `SEARCH_BRAVE_API_KEY`, `SEARCH_TAVILY_API_KEY`, `SEARCH_GOOGLE_CSE_API_KEY` - Backend credentials
+  - `SEARCH_BACKEND_PRIORITY=brave,duckduckgo,tavily,google_cse` - Failover order
+  - `SEARCH_DAILY_BUDGET_USD=1.0`, `SEARCH_MONTHLY_BUDGET_USD=10.0` - Cost limits
+  - `SEARCH_CACHE_ENABLED=true`, `SEARCH_CACHE_TTL_SECONDS=86400` - Cache settings
+
+- **Usage Example**:
+  ```python
+  # Autonomous search triggered by agent
+  user: "What's the latest Proxmox VE version?"
+  # Agent detects "latest version" pattern and calls web_search()
+
+  # Multi-source verification
+  from haia.services.search.selector import SearchBackendSelector
+  selector = SearchBackendSelector()
+  response = await selector.multi_source_search(
+      SearchRequest(query="Docker networking best practices")
+  )
+  # Results show: "✓ Verified by: brave, tavily (2 sources)"
+  ```
+
+- **Location**:
+  - Models: `src/haia/models/search.py`
+  - Backends: `src/haia/services/search/{brave,duckduckgo,tavily,google_cse}.py`
+  - Selector: `src/haia/services/search/selector.py`
+  - Cache: `src/haia/services/search/cache.py`
+  - Metrics: `src/haia/services/search/metrics.py`
+  - Tool: `src/haia/tools/search.py`
+  - API: `src/haia/api/search_metrics.py`
+
 ### Previous Features
 - N/A (stateless client, no persistence in this layer) (001-llm-abstraction)
 - Stateless API design - client manages conversation history (003-openai-chat-api)
 - Versatile companion system prompt - homelab as one capability among many (004-system-prompt-redesign)
 
 ## Recent Changes
+- 012-web-search: Added multi-backend web search with cost tracking and autonomous agent integration (Session 15)
 - 011-hybrid-retrieval: Added hybrid retrieval system (vector + BM25 + graph) with RRF merging (Session 13)
 - 009-context-optimization: Added Deduplicator, Ranker, BudgetManager, AccessTracker (Session 9)
 - 008-memory-retrieval: Added RetrievalService with semantic search (Session 8)

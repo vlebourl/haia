@@ -3,8 +3,9 @@
 import logging
 
 from pydantic_ai import Agent
+from pydantic_ai.models.anthropic import AnthropicModelSettings
 
-from haia.config import settings
+from haia.config import search_backend_settings, settings
 from haia.profile import load_profile_context
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ def build_system_prompt() -> str:
 
 
 def create_agent(model_name: str) -> Agent:
-    """Create PydanticAI agent with layered system prompt.
+    """Create PydanticAI agent with layered system prompt and tools.
 
     Args:
         model_name: Model identifier (e.g., "anthropic:claude-haiku-4-5-20251001")
@@ -56,11 +57,35 @@ def create_agent(model_name: str) -> Agent:
         1. Base prompt (from HAIA_SYSTEM_PROMPT or default)
         2. Personal profile (from haia_profile.yaml if exists)
 
+        Tools are conditionally registered based on feature flags:
+        - Web search (if SEARCH_ENABLED=true)
+
         PydanticAI has native support for Anthropic and Ollama models.
         Pass the model string directly and PydanticAI will handle initialization.
+
+        Thinking mode is enabled for Anthropic models to capture reasoning steps.
     """
     system_prompt = build_system_prompt()
-    return Agent(
+
+    # Enable thinking mode for Anthropic models to capture reasoning
+    model_settings = None
+    if model_name.startswith("anthropic:"):
+        model_settings = AnthropicModelSettings(
+            anthropic_thinking={"type": "enabled", "budget_tokens": 2000}
+        )
+        logger.info("Thinking mode enabled for Anthropic model (budget: 2000 tokens)")
+
+    agent = Agent(
         model=model_name,
         system_prompt=system_prompt,
+        model_settings=model_settings,
     )
+
+    # Register web search tool if enabled
+    if search_backend_settings.search_enabled:
+        from haia.tools.search import web_search
+
+        agent.tool(web_search)
+        logger.info("Web search tool registered with agent")
+
+    return agent

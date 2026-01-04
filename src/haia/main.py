@@ -31,7 +31,7 @@ def main():
                     "datefmt": "%Y-%m-%d %H:%M:%S",
                 },
                 "access": {
-                    "format": "%(asctime)s - %(levelname)s - %(client_addr)s - \"%(request_line)s\" %(status_code)s",
+                    "format": "%(asctime)s - %(levelname)s - %(message)s",
                     "datefmt": "%Y-%m-%d %H:%M:%S",
                 },
             },

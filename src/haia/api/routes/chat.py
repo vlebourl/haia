@@ -14,6 +14,17 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic_ai import Agent
+from pydantic_ai.messages import (
+    FunctionToolCallEvent,
+    FunctionToolResultEvent,
+    PartDeltaEvent,
+    PartStartEvent,
+    PartEndEvent,
+    TextPartDelta,
+    ThinkingPartDelta,
+    ThinkingPart,
+    TextPart,
+)
 
 from haia.api.deps import (
     get_agent,
@@ -189,6 +200,8 @@ async def stream_chat_response(
     accumulated_content = ""
     prompt_tokens = 0
     completion_tokens = 0
+    thinking_active = False  # Track if we're currently in thinking mode
+    current_part_kind = None  # Track current part type (thinking, text, tool-call)
 
     try:
         # Convert request messages to agent format
@@ -217,22 +230,165 @@ async def stream_chat_response(
         )
         yield f"data: {first_chunk.model_dump_json()}\n\n"
 
-        # Stream agent response using PydanticAI's streaming API
-        async with agent.run_stream(
+        # Stream agent response using PydanticAI's event streaming API
+        # This allows us to emit status indicators when tools are invoked
+        async for event in agent.run_stream_events(
             user_prompt=agent_messages[-1]["content"],
             message_history=message_history,
-        ) as result:
-            async for content_delta in result.stream_text(delta=True):
-                accumulated_content += content_delta
-                completion_tokens = len(accumulated_content.split())
+        ):
+            # Debug: Log ALL event types to see what's being emitted
+            logger.info(
+                f"[{correlation_id}] Event received: {type(event).__name__} | isinstance check: {isinstance(event, FunctionToolCallEvent)}"
+            )
 
-                # Create and send chunk
-                chunk = ChatCompletionChunk.from_delta(
-                    content=content_delta,
-                    model=request.model,
-                    chunk_id=chunk_id,
+            # Handle part start events (beginning of thinking, text, or tool-call sections)
+            if isinstance(event, PartStartEvent):
+                current_part_kind = event.part.part_kind
+
+                # Start thinking section
+                if isinstance(event.part, ThinkingPart):
+                    if not thinking_active:
+                        opening_tag = "<think>"  # Use OpenWebUI-preferred format
+                        accumulated_content += opening_tag
+                        chunk = ChatCompletionChunk.from_delta(
+                            content=opening_tag,
+                            model=request.model,
+                            chunk_id=chunk_id,
+                        )
+                        yield f"data: {chunk.model_dump_json()}\n\n"
+                        thinking_active = True
+                        logger.info(f"[{correlation_id}] Started thinking section (PartStartEvent)")
+
+                # Start text section (response)
+                elif isinstance(event.part, TextPart):
+                    # Check if transitioning from thinking
+                    if event.previous_part_kind == 'thinking' and thinking_active:
+                        closing_tag = "</think>"
+                        accumulated_content += closing_tag
+                        chunk = ChatCompletionChunk.from_delta(
+                            content=closing_tag,
+                            model=request.model,
+                            chunk_id=chunk_id,
+                        )
+                        yield f"data: {chunk.model_dump_json()}\n\n"
+                        thinking_active = False
+                        logger.info(f"[{correlation_id}] Closed thinking tag (transition to text)")
+
+                    logger.info(f"[{correlation_id}] Started text section (PartStartEvent)")
+
+                    # CRITICAL: Yield initial content if the TextPart contains it
+                    if hasattr(event.part, 'content') and event.part.content:
+                        initial_content = event.part.content
+                        accumulated_content += initial_content
+                        completion_tokens = len(accumulated_content.split())
+
+                        chunk = ChatCompletionChunk.from_delta(
+                            content=initial_content,
+                            model=request.model,
+                            chunk_id=chunk_id,
+                        )
+                        yield f"data: {chunk.model_dump_json()}\n\n"
+                        logger.info(f"[{correlation_id}] Yielded initial TextPart content: {initial_content[:50]}...")
+
+            # Handle part end events (completion of thinking, text, or tool-call sections)
+            elif isinstance(event, PartEndEvent):
+                # Close thinking if this part was thinking
+                if isinstance(event.part, ThinkingPart) and thinking_active:
+                    # Only close if the next part isn't also thinking
+                    if event.next_part_kind != 'thinking':
+                        closing_tag = "</think>"
+                        accumulated_content += closing_tag
+                        chunk = ChatCompletionChunk.from_delta(
+                            content=closing_tag,
+                            model=request.model,
+                            chunk_id=chunk_id,
+                        )
+                        yield f"data: {chunk.model_dump_json()}\n\n"
+                        thinking_active = False
+                        logger.info(f"[{correlation_id}] Closed thinking tag (PartEndEvent)")
+
+                current_part_kind = None
+
+            # Detect tool invocation and emit OpenWebUI-compatible status event
+            elif isinstance(event, FunctionToolCallEvent):
+                tool_name = event.part.tool_name
+                logger.info(f"[{correlation_id}] DETECTED FunctionToolCallEvent - tool_name: {tool_name}")
+                # Emit status indicator showing tool execution started
+                status_event = {
+                    "type": "status",
+                    "data": {
+                        "description": f"{tool_name.replace('_', ' ').title()} in progress...",
+                        "done": False,
+                    },
+                }
+                logger.info(f"[{correlation_id}] YIELDING status event: {status_event}")
+                yield f"data: {json.dumps(status_event)}\n\n"
+                logger.info(f"[{correlation_id}] Status event YIELDED successfully")
+
+            # Detect tool completion and emit status complete event
+            elif isinstance(event, FunctionToolResultEvent):
+                # Emit status indicator showing tool execution completed
+                status_event = {
+                    "type": "status",
+                    "data": {
+                        "description": "Search complete",
+                        "done": True,
+                    },
+                }
+                yield f"data: {json.dumps(status_event)}\n\n"
+                logger.debug(
+                    f"[{correlation_id}] Tool completed (call_id: {event.tool_call_id})"
                 )
-                yield f"data: {chunk.model_dump_json()}\n\n"
+
+            # Stream text and thinking content deltas
+            elif isinstance(event, PartDeltaEvent):
+                content_delta = None
+                delta_type = type(event.delta).__name__
+                logger.info(f"[{correlation_id}] PartDeltaEvent with delta type: {delta_type}")
+
+                # Handle text deltas
+                if isinstance(event.delta, TextPartDelta):
+                    content_delta = event.delta.content_delta
+                    if content_delta:
+                        logger.info(f"[{correlation_id}] TextPartDelta: {content_delta[:50]}...")
+
+                # Handle thinking deltas (reasoning/planning)
+                elif isinstance(event.delta, ThinkingPartDelta):
+                    content_delta = event.delta.content_delta
+                    if content_delta:
+                        logger.info(f"[{correlation_id}] ThinkingPartDelta: {content_delta[:50]}...")
+                    else:
+                        logger.info(f"[{correlation_id}] ThinkingPartDelta with None content_delta - skipping")
+
+                # Handle unknown delta types
+                else:
+                    logger.info(f"[{correlation_id}] SKIPPED PartDelta - type: {delta_type}")
+
+                # Stream the content if we have any
+                if content_delta:
+                    accumulated_content += content_delta
+                    completion_tokens = len(accumulated_content.split())
+
+                    # Create and send text chunk
+                    chunk = ChatCompletionChunk.from_delta(
+                        content=content_delta,
+                        model=request.model,
+                        chunk_id=chunk_id,
+                    )
+                    yield f"data: {chunk.model_dump_json()}\n\n"
+
+        # Cleanup: Close thinking tag if still open (edge case handling)
+        if thinking_active:
+            closing_tag = "</think>"
+            accumulated_content += closing_tag
+            chunk = ChatCompletionChunk.from_delta(
+                content=closing_tag,
+                model=request.model,
+                chunk_id=chunk_id,
+            )
+            yield f"data: {chunk.model_dump_json()}\n\n"
+            thinking_active = False
+            logger.warning(f"[{correlation_id}] Closed unclosed thinking tag at stream end")
 
         # Send final chunk with usage statistics
         final_chunk = ChatCompletionChunk.create_final_chunk(
@@ -407,7 +563,7 @@ async def chat_completions(
 
     # Check streaming mode
     if request.stream:
-        # Return SSE streaming response
+        # Return SSE streaming response with tool status indicators
         return StreamingResponse(
             stream_chat_response(request, agent, correlation_id, memory_context),
             media_type="text/event-stream",

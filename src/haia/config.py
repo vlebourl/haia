@@ -415,9 +415,118 @@ class HybridRetrievalConfig(BaseSettings):
     )
 
 
+class SearchBackendSettings(BaseSettings):
+    """Configuration for web search backends (Session 14 - Web Search Integration).
+
+    Supports multiple search backends with automatic failover:
+    - Brave Search API (recommended, paid)
+    - DuckDuckGo (free, fallback)
+    - Tavily API (AI-optimized, paid)
+    - Google Custom Search Engine (expensive, last resort)
+    """
+
+    # Search Feature Toggle
+    search_enabled: bool = Field(
+        default=True, description="Enable web search functionality"
+    )
+
+    # Backend API Keys
+    brave_api_key: str | None = Field(
+        None, description="Brave Search API key"
+    )
+    tavily_api_key: str | None = Field(
+        None, description="Tavily API key"
+    )
+    google_cse_api_key: str | None = Field(
+        None, description="Google Custom Search Engine API key"
+    )
+    google_cse_engine_id: str | None = Field(
+        None, description="Google CSE Search Engine ID (CX parameter)"
+    )
+
+    # Backend Priority (lower number = higher priority)
+    backend_priority: str = Field(
+        default="brave,duckduckgo,tavily,google_cse",
+        description="Comma-separated backend priority list",
+    )
+
+    # Cache Configuration
+    search_cache_enabled: bool = Field(
+        default=True, description="Enable search result caching"
+    )
+    search_cache_ttl_seconds: int = Field(
+        default=86400,
+        gt=0,
+        description="Default cache TTL in seconds (24 hours)",
+    )
+    search_cache_redis_url: str | None = Field(
+        None, description="Optional Redis URL for distributed caching (None = in-memory)"
+    )
+
+    # Cost Management
+    search_monthly_budget_usd: float = Field(
+        default=10.0,
+        ge=0.0,
+        description="Monthly budget for search API costs (USD)",
+    )
+    search_daily_budget_usd: float = Field(
+        default=1.0,
+        ge=0.0,
+        description="Daily budget for search API costs (USD)",
+    )
+    search_alert_threshold_percent: float = Field(
+        default=80.0,
+        ge=0.0,
+        le=100.0,
+        description="Budget alert threshold (percent)",
+    )
+
+    # Rate Limiting
+    search_max_queries_per_minute: int = Field(
+        default=30,
+        gt=0,
+        description="Max search queries per minute (global)",
+    )
+
+    # Result Processing
+    search_default_max_results: int = Field(
+        default=10,
+        ge=1,
+        le=20,
+        description="Number of results to fetch from backend",
+    )
+    search_default_top_results: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Number of results to present to user/LLM",
+    )
+    search_min_relevance_score: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum relevance score to include result",
+    )
+
+    # Timeouts
+    search_request_timeout_seconds: int = Field(
+        default=10,
+        gt=0,
+        description="HTTP request timeout for backend APIs",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="SEARCH_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 # Global settings instances
 settings = Settings()
 context_optimization_config = ContextOptimizationConfig()
 type_clustering_config = TypeClusteringConfig()
 relationship_inference_config = RelationshipInferenceConfig()
 hybrid_retrieval_config = HybridRetrievalConfig()
+search_backend_settings = SearchBackendSettings()
