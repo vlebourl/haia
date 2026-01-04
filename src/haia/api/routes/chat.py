@@ -17,13 +17,17 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
+    ModelRequest,
+    ModelResponse,
     PartDeltaEvent,
     PartStartEvent,
     PartEndEvent,
-    TextPartDelta,
-    ThinkingPartDelta,
-    ThinkingPart,
+    SystemPromptPart,
     TextPart,
+    TextPartDelta,
+    ThinkingPart,
+    ThinkingPartDelta,
+    UserPromptPart,
 )
 
 from haia.api.deps import (
@@ -72,6 +76,60 @@ async def get_conversation_id(
 
     # Use first 16 characters of SHA-256 hash
     return hashlib.sha256(fallback_str.encode("utf-8")).hexdigest()[:16]
+
+
+def convert_openai_to_pydantic_messages(
+    messages: list[dict[str, str]]
+) -> list[ModelRequest | ModelResponse]:
+    """Convert OpenAI-format messages to PydanticAI ModelMessage format.
+
+    Args:
+        messages: List of message dicts with 'role' and 'content' keys
+                  Format: [{"role": "user"|"assistant"|"system", "content": str}]
+
+    Returns:
+        List of PydanticAI ModelMessage objects (ModelRequest | ModelResponse)
+
+    Note:
+        PydanticAI requires proper ModelMessage objects for message_history.
+        Plain dicts are silently ignored, causing conversation continuity to break.
+
+        This converts OpenWebUI's OpenAI-compatible format to PydanticAI's internal format.
+    """
+    from datetime import datetime, UTC
+
+    pydantic_messages: list[ModelRequest | ModelResponse] = []
+
+    for msg in messages:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+
+        if role == "user":
+            # User message → ModelRequest with UserPromptPart
+            pydantic_messages.append(
+                ModelRequest(
+                    parts=[UserPromptPart(content=content, timestamp=datetime.now(UTC))]
+                )
+            )
+        elif role == "assistant":
+            # Assistant message → ModelResponse with TextPart
+            pydantic_messages.append(
+                ModelResponse(
+                    parts=[TextPart(content=content)],
+                    timestamp=datetime.now(UTC),
+                )
+            )
+        elif role == "system":
+            # System message → ModelRequest with SystemPromptPart
+            pydantic_messages.append(
+                ModelRequest(
+                    parts=[SystemPromptPart(content=content, timestamp=datetime.now(UTC))]
+                )
+            )
+        else:
+            logger.warning(f"Unknown message role: {role}, skipping message")
+
+    return pydantic_messages
 
 
 def format_memories_natural_language(retrieval_response) -> str:
@@ -212,9 +270,13 @@ async def stream_chat_response(
         # Inject memory context if available
         if memory_context:
             memory_message = {"role": "system", "content": memory_context}
-            message_history = [memory_message] + agent_messages[:-1]
+            message_history_dicts = [memory_message] + agent_messages[:-1]
         else:
-            message_history = agent_messages[:-1]
+            message_history_dicts = agent_messages[:-1]
+
+        # Convert to PydanticAI format for proper conversation continuity
+        # PydanticAI requires ModelRequest/ModelResponse objects, not plain dicts
+        message_history = convert_openai_to_pydantic_messages(message_history_dicts)
 
         # Calculate prompt tokens (rough estimate)
         prompt_tokens = sum(len(msg["content"].split()) for msg in agent_messages)
@@ -584,12 +646,16 @@ async def chat_completions(
         if memory_context:
             # Prepend memory context as a system message to message history
             memory_message = {"role": "system", "content": memory_context}
-            message_history = [memory_message] + agent_messages[:-1]
+            message_history_dicts = [memory_message] + agent_messages[:-1]
             logger.debug(
                 f"[{correlation_id}] Injected memory context ({len(memory_context)} chars)"
             )
         else:
-            message_history = agent_messages[:-1]
+            message_history_dicts = agent_messages[:-1]
+
+        # Convert to PydanticAI format for proper conversation continuity
+        # PydanticAI requires ModelRequest/ModelResponse objects, not plain dicts
+        message_history = convert_openai_to_pydantic_messages(message_history_dicts)
 
         logger.debug(
             f"[{correlation_id}] Sending {len(agent_messages)} messages to agent "
