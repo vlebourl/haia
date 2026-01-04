@@ -775,8 +775,8 @@ class Neo4jService:
         MATCH (m:Memory)
         WHERE m.has_embedding = false OR m.has_embedding IS NULL
         RETURN
-          m.id AS memory_id,
-          m.type AS memory_type,
+          m.memory_id AS memory_id,
+          m.memory_type AS memory_type,
           m.content AS content
         LIMIT $batch_size
         """
