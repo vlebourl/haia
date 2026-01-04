@@ -73,20 +73,41 @@ async def lifespan(app: FastAPI):
     set_neo4j_service(neo4j_service)
     logger.info("Neo4j connection established")
 
-    # Initialize Ollama client and retrieval service (Session 8 - Memory Retrieval)
-    # Graceful degradation: If Ollama unavailable, skip retrieval (conversations still work)
+    # Initialize embedding client and retrieval service (Session 8 - Memory Retrieval)
+    # Supports Google (API, works on GTX 1080) or Ollama (local, requires RTX GPU)
+    # Graceful degradation: If unavailable, skip retrieval (conversations still work)
     try:
-        logger.info(f"Initializing Ollama client at {settings.ollama_base_url}")
-        ollama_client = OllamaClient(
-            base_url=settings.ollama_base_url,
-            model=settings.embedding_model.split(":")[-1],  # Extract model name from "ollama:model"
-            timeout=30.0,
-            max_retries=3,
-        )
+        embedding_client = None
 
-        # Health check Ollama
-        if await ollama_client.health_check():
-            logger.info(f"Initializing retrieval service (model: {settings.embedding_model})")
+        # Choose embedding provider based on configuration
+        if settings.embedding_provider == "google":
+            # Use Google Gemini Embedding API (works on any GPU, API-based)
+            if not settings.google_api_key:
+                raise ValueError("GOOGLE_API_KEY not set but embedding_provider='google'")
+
+            logger.info(f"Initializing Google Embedding client (model: {settings.google_embedding_model})")
+            from haia.embedding.google_adapter import GoogleEmbeddingAdapter
+
+            embedding_client = GoogleEmbeddingAdapter(
+                api_key=settings.google_api_key,
+                model=settings.google_embedding_model,
+            )
+
+        else:  # Default to Ollama
+            # Use Ollama local embeddings (requires RTX GPU with sufficient VRAM)
+            logger.info(f"Initializing Ollama client at {settings.ollama_base_url}")
+            from haia.embedding.ollama_client import OllamaClient
+
+            embedding_client = OllamaClient(
+                base_url=settings.ollama_base_url,
+                model=settings.embedding_model.split(":")[-1],  # Extract model name from "ollama:model"
+                timeout=30.0,
+                max_retries=3,
+            )
+
+        # Health check embedding service
+        if embedding_client and await embedding_client.health_check():
+            logger.info(f"Initializing retrieval service (provider: {settings.embedding_provider})")
 
             # Load type weights from settings (Session 8 - User Story 3)
             type_weights = {
@@ -99,7 +120,7 @@ async def lifespan(app: FastAPI):
 
             retrieval_service = RetrievalService(
                 neo4j_service=neo4j_service,
-                ollama_client=ollama_client,
+                ollama_client=embedding_client,  # Works with both Google adapter and Ollama client
                 similarity_weight=0.5,  # 50%
                 confidence_weight=0.3,  # 30%
                 recency_weight=0.2,  # 20%
@@ -109,7 +130,7 @@ async def lifespan(app: FastAPI):
             logger.info("Retrieval service initialized successfully")
         else:
             logger.warning(
-                "Ollama health check failed - memory retrieval disabled. "
+                f"{settings.embedding_provider.title()} embedding health check failed - memory retrieval disabled. "
                 "Conversations will continue without semantic memory injection."
             )
     except Exception as e:
