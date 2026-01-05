@@ -73,20 +73,55 @@ async def lifespan(app: FastAPI):
     set_neo4j_service(neo4j_service)
     logger.info("Neo4j connection established")
 
-    # Initialize Ollama client and retrieval service (Session 8 - Memory Retrieval)
-    # Graceful degradation: If Ollama unavailable, skip retrieval (conversations still work)
+    # Create vector index for memory embeddings (Session 8 - Memory Retrieval)
+    # This enables semantic search over memory nodes
     try:
-        logger.info(f"Initializing Ollama client at {settings.ollama_base_url}")
-        ollama_client = OllamaClient(
-            base_url=settings.ollama_base_url,
-            model=settings.embedding_model.split(":")[-1],  # Extract model name from "ollama:model"
-            timeout=30.0,
-            max_retries=3,
+        await neo4j_service.create_vector_index(
+            index_name="memory_embeddings",
+            node_label="Memory",
+            property_name="embedding",
+            dimensions=settings.embedding_dim,  # 768 for text-embedding-004
+            similarity_function="cosine",
         )
+        logger.info(f"Vector index 'memory_embeddings' ready (dim={settings.embedding_dim})")
+    except Exception as e:
+        logger.warning(f"Failed to create vector index (may already exist): {e}")
 
-        # Health check Ollama
-        if await ollama_client.health_check():
-            logger.info(f"Initializing retrieval service (model: {settings.embedding_model})")
+    # Initialize embedding client and retrieval service (Session 8 - Memory Retrieval)
+    # Supports Google (API, works on GTX 1080) or Ollama (local, requires RTX GPU)
+    # Graceful degradation: If unavailable, skip retrieval (conversations still work)
+    try:
+        embedding_client = None
+
+        # Choose embedding provider based on configuration
+        if settings.embedding_provider == "google":
+            # Use Google Gemini Embedding API (works on any GPU, API-based)
+            if not settings.google_api_key:
+                raise ValueError("GOOGLE_API_KEY not set but embedding_provider='google'")
+
+            logger.info(f"Initializing Google Embedding client (model: {settings.google_embedding_model})")
+            from haia.embedding.google_adapter import GoogleEmbeddingAdapter
+
+            embedding_client = GoogleEmbeddingAdapter(
+                api_key=settings.google_api_key,
+                model=settings.google_embedding_model,
+            )
+
+        else:  # Default to Ollama
+            # Use Ollama local embeddings (requires RTX GPU with sufficient VRAM)
+            logger.info(f"Initializing Ollama client at {settings.ollama_base_url}")
+            from haia.embedding.ollama_client import OllamaClient
+
+            embedding_client = OllamaClient(
+                base_url=settings.ollama_base_url,
+                model=settings.embedding_model.split(":")[-1],  # Extract model name from "ollama:model"
+                timeout=30.0,
+                max_retries=3,
+            )
+
+        # Health check embedding service
+        if embedding_client and await embedding_client.health_check():
+            logger.info(f"Initializing retrieval service (provider: {settings.embedding_provider})")
 
             # Load type weights from settings (Session 8 - User Story 3)
             type_weights = {
@@ -99,7 +134,7 @@ async def lifespan(app: FastAPI):
 
             retrieval_service = RetrievalService(
                 neo4j_service=neo4j_service,
-                ollama_client=ollama_client,
+                ollama_client=embedding_client,  # Works with both Google adapter and Ollama client
                 similarity_weight=0.5,  # 50%
                 confidence_weight=0.3,  # 30%
                 recency_weight=0.2,  # 20%
@@ -109,7 +144,7 @@ async def lifespan(app: FastAPI):
             logger.info("Retrieval service initialized successfully")
         else:
             logger.warning(
-                "Ollama health check failed - memory retrieval disabled. "
+                f"{settings.embedding_provider.title()} embedding health check failed - memory retrieval disabled. "
                 "Conversations will continue without semantic memory injection."
             )
     except Exception as e:
@@ -169,11 +204,12 @@ async def lifespan(app: FastAPI):
         f"Initializing conversation tracker (storage: {settings.transcript_storage_dir})"
     )
 
-    # Inject ollama_client if available (for Session 8 embedding generation)
-    tracker_ollama_client = None
-    if "ollama_client" in locals() and ollama_client is not None:
-        tracker_ollama_client = ollama_client
-        logger.info("Embedding generation enabled for memory extraction")
+    # Inject embedding_client if available (for Session 8 embedding generation)
+    # Works with both Google (GoogleEmbeddingAdapter) and Ollama (OllamaClient)
+    tracker_embedding_client = None
+    if "embedding_client" in locals() and embedding_client is not None:
+        tracker_embedding_client = embedding_client
+        logger.info(f"Embedding generation enabled for memory extraction (provider: {settings.embedding_provider})")
 
     tracker = ConversationTracker(
         storage_dir=settings.transcript_storage_dir,
@@ -182,21 +218,22 @@ async def lifespan(app: FastAPI):
         max_tracked_conversations=settings.boundary_max_tracked_conversations,
         extraction_service=extraction_service,
         memory_storage_service=memory_storage_service,
-        ollama_client=tracker_ollama_client,
+        ollama_client=tracker_embedding_client,  # Parameter name is "ollama_client" for backwards compat
         embedding_version=settings.embedding_model.split(":")[-1] + "-v1",
     )
     set_conversation_tracker(tracker)
 
     # Initialize backfill worker for existing memories without embeddings (Session 8)
+    # Works with both Google (GoogleEmbeddingAdapter) and Ollama (OllamaClient)
     backfill_task = None
-    if tracker_ollama_client:
+    if tracker_embedding_client:
         try:
             from haia.embedding.backfill_worker import EmbeddingBackfillWorker
 
-            logger.info("Initializing embedding backfill worker")
+            logger.info(f"Initializing embedding backfill worker (provider: {settings.embedding_provider})")
             backfill_worker = EmbeddingBackfillWorker(
                 neo4j_service=neo4j_service,
-                ollama_client=tracker_ollama_client,
+                ollama_client=tracker_embedding_client,  # Parameter name is "ollama_client" for backwards compat
                 memory_storage=memory_storage_service,
                 batch_size=25,
                 max_workers=2,
@@ -206,7 +243,7 @@ async def lifespan(app: FastAPI):
 
             # Launch backfill worker in background (non-blocking)
             backfill_task = asyncio.create_task(backfill_worker.start())
-            logger.info("Backfill worker started in background")
+            logger.info(f"Backfill worker started in background (provider: {settings.embedding_provider})")
 
         except Exception as e:
             logger.warning(

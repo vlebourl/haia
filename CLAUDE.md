@@ -202,6 +202,41 @@ HAIA automatically extracts and stores user preferences, technical context, and 
 - Storage: `src/haia/services/memory_storage.py`
 - Integration: `src/haia/memory/tracker.py:_extract_and_store_memories()`
 
+## Docker & Deployment Best Practices
+
+**Working with the Containerized Stack**:
+- The entire HAIA stack runs in Docker containers (HAIA API + Neo4j + OpenWebUI)
+- Always use `--env-file .env` instead of passing environment variables on command line:
+  ```bash
+  # ✅ Good
+  docker compose -f deployment/docker-compose.yml --env-file .env up -d
+
+  # ❌ Avoid (hard to maintain, error-prone)
+  ANTHROPIC_API_KEY=... HAIA_MODEL=... docker compose up -d
+  ```
+- Testing must run against the containerized stack - don't assume access to Python modules from host
+- Rebuilding after code changes:
+  ```bash
+  docker compose -f deployment/docker-compose.yml --env-file .env build haia --no-cache
+  docker compose -f deployment/docker-compose.yml --env-file .env up -d
+  ```
+
+**Embedding Configuration**:
+- **Google Embeddings** (recommended for GTX 1080 and similar older GPUs):
+  - Set `EMBEDDING_PROVIDER=google` in `.env`
+  - Requires `GOOGLE_API_KEY` and `GOOGLE_EMBEDDING_MODEL` (default: `text-embedding-004`)
+  - Works on any GPU, API-based, 768 dimensions
+- **Ollama Embeddings** (requires RTX GPU with sufficient VRAM):
+  - Set `EMBEDDING_PROVIDER=ollama` in `.env`
+  - Requires local Ollama server running with `nomic-embed-text` model
+  - Local inference, no API costs
+
+**Testing Configuration**:
+- Boundary detection threshold defaults to 10 minutes (production)
+- For testing, set `BOUNDARY_IDLE_THRESHOLD_MINUTES=1` in `.env` for faster iteration
+- Remember to change back to 10 minutes for production deployments
+- All boundary settings must be in both `.env` and `deployment/docker-compose.yml`
+
 ## Development Workflow
 
 This project uses **spec-kit** for structured development:
@@ -245,6 +280,7 @@ All configuration managed through `pydantic-settings` with environment variables
 - Multi-backend search: Brave Search API, DuckDuckGo, Tavily (AI-optimized), Google CSE with automatic failover (012-web-search)
 - Python 3.11+ (existing project standard) + PydanticAI 1.25.1+, FastAPI (existing), httpx (async HTTP) (013-streaming-tool-status)
 - N/A (stateless streaming response modification) (013-streaming-tool-status)
+- Neo4j 5.15+ graph database (existing, already has Memory and Conversation nodes) (014-extraction-integration)
 
 ### Memory System (006-docker-neo4j-stack)
 - **Neo4j 5.15 Graph Database** with async Python driver (`neo4j` package)

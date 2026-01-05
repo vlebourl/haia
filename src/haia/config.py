@@ -106,9 +106,13 @@ class Settings(BaseSettings):
     )
 
     # Embedding Configuration (Session 8 - Memory Retrieval)
+    embedding_provider: str = Field(
+        "google",
+        description="Embedding provider: 'google' (API, recommended for GTX 1080) or 'ollama' (local, requires RTX GPU)",
+    )
     embedding_model: str = Field(
         "ollama:nomic-embed-text",
-        description="Embedding model in 'provider:model' format",
+        description="Embedding model in 'provider:model' format (deprecated - use embedding_provider + google_embedding_model)",
     )
     embedding_dim: int = Field(
         768,
@@ -170,6 +174,10 @@ class Settings(BaseSettings):
     google_api_key: str | None = Field(
         None,
         description="Google Gemini API key (required for type clustering with Google embeddings)",
+    )
+    google_embedding_model: str = Field(
+        "text-embedding-004",
+        description="Google embedding model name (768-dim, used for retrieval and type clustering)",
     )
 
     model_config = SettingsConfigDict(

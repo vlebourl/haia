@@ -132,11 +132,13 @@ class MemoryStorageService:
 
         // Create memory node
         CREATE (m:Memory {
-            id: $memory_id,
-            type: $memory_type,
+            memory_id: $memory_id,
+            memory_type: $memory_type,
             content: $content,
             confidence: $confidence,
             category: $category,
+            source_conversation_id: $conversation_id,
+            extraction_timestamp: datetime($extraction_time),
             created_at: datetime($extraction_time),
             // Session 10: Temporal properties
             valid_from: datetime($valid_from),
@@ -154,7 +156,7 @@ class MemoryStorageService:
         // Store metadata as separate properties
         SET m += $metadata
 
-        RETURN m.id as memory_id
+        RETURN m.memory_id as memory_id
         """
 
         params = {
@@ -229,13 +231,13 @@ class MemoryStorageService:
 
         # Cypher query to update memory with embedding
         query = """
-        MATCH (m:Memory {id: $memory_id})
+        MATCH (m:Memory {memory_id: $memory_id})
         SET
             m.embedding = $embedding,
             m.has_embedding = $has_embedding,
             m.embedding_version = $embedding_version,
             m.embedding_updated_at = datetime()
-        RETURN m.id as memory_id
+        RETURN m.memory_id as memory_id
         """
 
         params = {
