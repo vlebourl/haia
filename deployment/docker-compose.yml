@@ -12,6 +12,7 @@ services:
     volumes:
       - ${DATA_DIR:-../data}/haia/logs:/app/logs
       - ${DATA_DIR:-../data}/haia/transcripts:/app/data/transcripts
+      - ./litellm_config.yaml:/app/deployment/litellm_config.yaml:ro
     environment:
       # LLM Configuration
       HAIA_MODEL: ${HAIA_MODEL}
@@ -68,8 +69,14 @@ services:
       SEARCH_MAX_QUERIES_PER_MINUTE: ${SEARCH_MAX_QUERIES_PER_MINUTE:-30}
       SEARCH_DEFAULT_MAX_RESULTS: ${SEARCH_DEFAULT_MAX_RESULTS:-10}
       SEARCH_REQUEST_TIMEOUT_SECONDS: ${SEARCH_REQUEST_TIMEOUT_SECONDS:-10}
+
+      # LiteLLM Proxy Configuration (Session 16)
+      LITELLM_PROXY_URL: ${LITELLM_PROXY_URL:-http://litellm:4000}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
     depends_on:
       neo4j:
+        condition: service_healthy
+      litellm:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -111,6 +118,66 @@ services:
       timeout: 5s
       retries: 5
       start_period: 40s
+
+  litellm-db:
+    image: postgres:16-alpine
+    container_name: haia-litellm-db
+    restart: unless-stopped
+    networks:
+      - haia-network
+    volumes:
+      - ${DATA_DIR:-../data}/litellm/postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${LITELLM_DB_PASSWORD}
+      POSTGRES_DB: litellm
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  litellm:
+    image: ghcr.io/berriai/litellm-database:main-stable
+    container_name: haia-litellm
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    networks:
+      - haia-network
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+    environment:
+      # Database Configuration
+      DATABASE_URL: "postgresql://litellm:${LITELLM_DB_PASSWORD}@litellm-db:5432/litellm"
+      STORE_MODEL_IN_DB: "True"
+
+      # LiteLLM Configuration
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-sk-salt-key-change-in-production}
+
+      # UI Credentials
+      UI_USERNAME: ${UI_USERNAME:-admin}
+      UI_PASSWORD: ${UI_PASSWORD:-changeme}
+
+      # Provider API Keys
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/readiness').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main

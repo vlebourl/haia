@@ -93,6 +93,16 @@ class Settings(BaseSettings):
         description="Neo4j password (required)",
     )
 
+    # LiteLLM Proxy Configuration (Session 16)
+    litellm_proxy_url: str | None = Field(
+        None,
+        description="LiteLLM proxy URL (e.g., http://litellm:4000)",
+    )
+    litellm_master_key: str | None = Field(
+        None,
+        description="LiteLLM admin API key for proxy access",
+    )
+
     # Memory Extraction Configuration
     extraction_model: str | None = Field(
         None,
@@ -423,6 +433,47 @@ class HybridRetrievalConfig(BaseSettings):
     )
 
 
+class LiteLLMBudgetConfig(BaseSettings):
+    """Configuration for LiteLLM budget management (Session 16 - LiteLLM Integration).
+
+    Controls monthly spending limits, alerts, and over-budget behavior for
+    LiteLLM proxy routing across multiple providers.
+    """
+
+    # Budget Configuration
+    enabled: bool = Field(default=True, description="Enable budget tracking")
+    monthly_limit_usd: float = Field(
+        default=50.0, ge=0.0, description="Hard stop at this amount"
+    )
+    alert_threshold_80: bool = Field(
+        default=True, description="Alert at 80% of budget"
+    )
+    alert_threshold_95: bool = Field(
+        default=True, description="Alert at 95% of budget"
+    )
+    alert_notification_channel: str = Field(
+        default="telegram", description="Where to send alerts"
+    )
+    budget_reset_day: int = Field(
+        default=1, ge=1, le=31, description="Day of month to reset (1-31)"
+    )
+    over_budget_behavior: str = Field(
+        default="ollama_only",
+        description="Behavior when over budget: ollama_only, block_all, queue_critical",
+    )
+    critical_features: list[str] = Field(
+        default_factory=lambda: ["extraction", "relationships"],
+        description="Features that always queue when over budget",
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="LITELLM_BUDGET_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 class SearchBackendSettings(BaseSettings):
     """Configuration for web search backends (Session 14 - Web Search Integration).
 
@@ -537,4 +588,5 @@ context_optimization_config = ContextOptimizationConfig()
 type_clustering_config = TypeClusteringConfig()
 relationship_inference_config = RelationshipInferenceConfig()
 hybrid_retrieval_config = HybridRetrievalConfig()
+litellm_budget_config = LiteLLMBudgetConfig()
 search_backend_settings = SearchBackendSettings()
