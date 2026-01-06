@@ -8,16 +8,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from haia.agent import create_agent
+from haia.agent import build_system_prompt
 from haia.api.deps import (
     set_agent,
     set_conversation_tracker,
     set_neo4j_service,
     set_retrieval_service,
 )
+from haia.services.llm_factory import llm_factory
 from haia.api.routes import chat
 from haia.config import (
     relationship_inference_config,
+    search_backend_settings,
     settings,
     type_clustering_config,
 )
@@ -57,9 +59,21 @@ async def lifespan(app: FastAPI):
     if settings.anthropic_api_key:
         os.environ["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
 
-    # Create PydanticAI agent with model from config
-    logger.info(f"Creating PydanticAI agent with model: {settings.haia_model}")
-    agent = create_agent(settings.haia_model)
+    # Create PydanticAI agent using LiteLLM factory (Session 16)
+    # This enables routing through LiteLLM proxy with automatic failover
+    logger.info("Creating PydanticAI agent for chat feature via LiteLLM factory")
+    system_prompt = build_system_prompt()
+    agent = llm_factory.create_agent(
+        feature="chat",
+        system_prompt=system_prompt,
+    )
+
+    # Register web search tool if enabled
+    if search_backend_settings.search_enabled:
+        from haia.tools.search import web_search
+        agent.tool(web_search)
+        logger.info("Web search tool registered with agent")
+
     set_agent(agent)
 
     # Initialize Neo4j connection

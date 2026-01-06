@@ -48,6 +48,57 @@ HAIA uses two types of tools:
 
 When adding new capabilities, **prefer MCP servers** if community implementations exist. Only create custom tools for homelab-specific logic.
 
+### Context7 Documentation Integration
+
+**IMPORTANT**: Always use Context7 MCP for up-to-date documentation when working with libraries or adding new features.
+
+**When to Query Context7**:
+- Before implementing a new feature with an existing library
+- When adding a new library dependency
+- When encountering API usage questions
+- When troubleshooting integration issues
+- When exploring advanced features or configuration options
+
+**Key Libraries with Context7 Documentation**:
+
+| Library | Context7 ID | Purpose |
+|---------|-------------|---------|
+| LiteLLM Proxy | `/websites/litellm_ai` or `/berriai/litellm` | LLM routing, fallback, cost tracking |
+| PydanticAI | `/websites/ai_pydantic_dev` | Agent framework, tool integration |
+| FastAPI | `/websites/fastapi_tiangolo` | Web framework, API endpoints |
+| Pydantic | `/websites/pydantic_dev` | Data validation, settings |
+| Neo4j Python | `/neo4j/neo4j-python-driver` | Graph database operations |
+| HTTPX | `/encode/httpx` | Async HTTP client |
+| Tavily | `/tavily-ai/tavily-python` or `/websites/tavily` | AI-optimized web search |
+
+**How to Query Context7**:
+```python
+# Step 1: Resolve library ID
+mcp__context7__resolve-library-id(
+    libraryName="litellm",
+    query="LiteLLM proxy Docker PostgreSQL deployment"
+)
+
+# Step 2: Query specific documentation
+mcp__context7__query-docs(
+    libraryId="/websites/litellm_ai",
+    query="Docker compose PostgreSQL DATABASE_URL configuration"
+)
+```
+
+**Examples**:
+- Adding a new feature: Query for API methods, configuration options, best practices
+- Troubleshooting: Search for error messages, common issues, workarounds
+- Configuration: Look up environment variables, YAML schema, routing strategies
+- Integration: Find code examples for connecting libraries together
+
+**Best Practices**:
+1. Query Context7 BEFORE implementing to avoid outdated patterns
+2. Use specific queries (e.g., "Docker deployment PostgreSQL" not just "deployment")
+3. Check multiple library IDs if available (e.g., `/berriai/litellm` vs `/websites/litellm_ai`)
+4. Save frequently used library IDs in this document for quick reference
+5. Update this table when adding new dependencies
+
 ### Application Type: Standalone API Server
 
 HAIA is a **standalone application**, not a library. It runs as a long-running service exposing:
@@ -281,6 +332,8 @@ All configuration managed through `pydantic-settings` with environment variables
 - Python 3.11+ (existing project standard) + PydanticAI 1.25.1+, FastAPI (existing), httpx (async HTTP) (013-streaming-tool-status)
 - N/A (stateless streaming response modification) (013-streaming-tool-status)
 - Neo4j 5.15+ graph database (existing, already has Memory and Conversation nodes) (014-extraction-integration)
+- Python 3.11+ + PydanticAI 1.25.1+ (LiteLLMProvider), httpx, pydantic-settings (015-litellm-proxy)
+- LiteLLM proxy (Docker: ghcr.io/berriai/litellm) + PostgreSQL 16+ (cost tracking, virtual keys) + Redis (optional caching) (015-litellm-proxy)
 
 ### Memory System (006-docker-neo4j-stack)
 - **Neo4j 5.15 Graph Database** with async Python driver (`neo4j` package)
@@ -433,12 +486,55 @@ All configuration managed through `pydantic-settings` with environment variables
   - Tool: `src/haia/tools/search.py`
   - API: `src/haia/api/search_metrics.py`
 
+### LiteLLM Proxy Integration (015-litellm-proxy)
+- **Full Proxy Mode Architecture**: OpenWebUI → HAIA API (PydanticAI) → LiteLLM Proxy → LLM Providers
+  - Centralized routing, load balancing, fallback handling, caching, cost tracking
+  - Docker deployment: litellm + litellm-db (PostgreSQL 16+) containers
+  - Configuration: deployment/litellm_config.yaml (YAML-based routing)
+
+- **PydanticAI Integration** (`src/haia/services/llm_factory.py`)
+  - Factory pattern for creating LiteLLM-backed agents per feature
+  - Uses native LiteLLMProvider with api_base + api_key
+  - Feature tagging: chat, extraction, relationships, themes
+
+- **Routing Strategies** (configured per feature):
+  - Chat: Gemini 2.0 Flash → Sonnet → Mistral → OpenAI → Ollama
+  - Extraction: Sonnet → Gemini Pro → Mistral Large → fail and queue
+  - Relationships: Sonnet → Gemini Pro → Mistral Large → fail and queue
+  - Themes: Gemini Pro → Sonnet
+
+- **Cost Tracking** (`src/haia/services/cost_tracker.py`, `src/haia/api/routes/costs.py`)
+  - Automatic per-request tracking in PostgreSQL (LiteLLM_VerificationTokenTable)
+  - Cost dashboard API: GET /v1/costs/summary, /v1/costs/details, /v1/costs/budget
+  - Budget management: $50/month default with alerts at 80% and hard stop at 100%
+
+- **Caching** (LiteLLM built-in):
+  - Theme discovery: 24 hour TTL (high cache hit rate expected)
+  - Memory extraction: Permanent cache by conversation ID
+  - Relationship inference: 7 day TTL by memory pair ID
+  - Chat: No caching (interactive use requires fresh responses)
+
+- **Configuration** (`.env`):
+  - `LITELLM_PROXY_URL=http://litellm:4000` - Proxy endpoint
+  - `LITELLM_MASTER_KEY=sk-litellm-master-key` - Admin access
+  - `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`, `OPENAI_API_KEY` - Provider credentials
+  - `LITELLM_DB_PASSWORD` - PostgreSQL password
+
+- **Location**:
+  - Models: `src/haia/models/litellm.py`
+  - Factory: `src/haia/services/llm_factory.py`
+  - Cost Tracker: `src/haia/services/cost_tracker.py`
+  - LiteLLM Client: `src/haia/clients/litellm.py`
+  - Cost API: `src/haia/api/routes/costs.py`
+  - Config: `deployment/litellm_config.yaml`
+
 ### Previous Features
 - N/A (stateless client, no persistence in this layer) (001-llm-abstraction)
 - Stateless API design - client manages conversation history (003-openai-chat-api)
 - Versatile companion system prompt - homelab as one capability among many (004-system-prompt-redesign)
 
 ## Recent Changes
+- 015-litellm-proxy: Added LiteLLM proxy integration for centralized routing, cost tracking, and fallback handling (Session 16)
 - 012-web-search: Added multi-backend web search with cost tracking and autonomous agent integration (Session 15)
 - 011-hybrid-retrieval: Added hybrid retrieval system (vector + BM25 + graph) with RRF merging (Session 13)
 - 009-context-optimization: Added Deduplicator, Ranker, BudgetManager, AccessTracker (Session 9)

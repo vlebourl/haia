@@ -1,0 +1,200 @@
+# LiteLLM Proxy Configuration - HAIA Integration
+# Session 16: LiteLLM Proxy Integration
+# Centralized routing, cost tracking, fallback handling, and observability
+
+# General Settings
+# master_key and database_url are set via environment variables in docker-compose.yml
+general_settings: {}
+
+# Router Settings
+router_settings:
+  routing_strategy: simple-shuffle  # Load balance across healthy models
+  num_retries: 3                   # Retry failed requests up to 3 times
+  timeout: 60                      # Request timeout (seconds) - increased for slower models
+  retry_after: 1                   # Exponential backoff starting delay
+  allowed_fails: 3                 # Cooldown after N consecutive failures per deployment
+  enable_pre_call_checks: true     # Enable context window checks before calling
+
+# LiteLLM Settings
+litellm_settings:
+  cache: true
+  cache_params:
+    type: "local"  # Use "redis" for multi-instance HAIA
+    ttl: 86400     # Default 24 hours
+  set_verbose: false
+  json_logs: true
+
+# Budget Settings
+budget_settings:
+  enabled: true
+  monthly_budget: 50.0
+  currency: "usd"
+  alert_thresholds: [0.8, 1.0]  # Alert at 80% and 100%
+
+# Model List
+# IMPORTANT: All models with the same model_name form a fallback group
+# LiteLLM automatically tries them in priority order on failure
+model_list:
+  # =========================================================================
+  # CHAT FEATURE - General conversation
+  # =========================================================================
+  # Fallback chain: Sonnet → Gemini → Mistral → GPT-4o Mini → Ollama
+  - model_name: chat
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      metadata:
+        priority: 1
+        description: "Primary chat - Claude Sonnet 4.5 for balanced quality/speed"
+
+  - model_name: chat
+    litellm_params:
+      model: gemini/gemini-2.0-flash-exp
+      api_key: os.environ/GOOGLE_API_KEY
+    model_info:
+      metadata:
+        priority: 2
+        description: "Fallback 1 - Gemini Flash for cost-effective responses"
+
+  - model_name: chat
+    litellm_params:
+      model: mistral/mistral-large-latest
+      api_key: os.environ/MISTRAL_API_KEY
+    model_info:
+      metadata:
+        priority: 3
+        description: "Fallback 2 - Mistral Large for European data residency"
+
+  - model_name: chat
+    litellm_params:
+      model: gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      metadata:
+        priority: 4
+        description: "Fallback 3 - GPT-4o Mini for OpenAI compatibility"
+
+  - model_name: chat
+    litellm_params:
+      model: ollama/qwen2.5-coder:7b
+      api_base: http://host.docker.internal:11434
+    model_info:
+      metadata:
+        priority: 5
+        description: "Fallback 4 - Local Ollama (zero cost, privacy)"
+
+  # =========================================================================
+  # PREMIUM FEATURE - Maximum quality for complex tasks
+  # =========================================================================
+  # Fallback chain: Opus → Sonnet → GPT-4o
+  - model_name: premium
+    litellm_params:
+      model: anthropic/claude-opus-4-5-20251101
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      metadata:
+        priority: 1
+        description: "Primary premium - Claude Opus 4.5 (highest quality)"
+
+  - model_name: premium
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      metadata:
+        priority: 2
+        description: "Fallback 1 - Claude Sonnet 4.5 (balanced)"
+
+  - model_name: premium
+    litellm_params:
+      model: gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      metadata:
+        priority: 3
+        description: "Fallback 2 - GPT-4o (OpenAI flagship)"
+
+  # =========================================================================
+  # EXTRACTION FEATURE - Memory extraction from conversations
+  # =========================================================================
+  # Fallback chain: Sonnet → Opus → Gemini Pro
+  - model_name: extraction
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      metadata:
+        priority: 1
+        description: "Primary extraction - Claude Sonnet (structured output)"
+
+  - model_name: extraction
+    litellm_params:
+      model: anthropic/claude-opus-4-5-20251101
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      metadata:
+        priority: 2
+        description: "Fallback 1 - Claude Opus (complex extraction)"
+
+  - model_name: extraction
+    litellm_params:
+      model: gemini/gemini-1.5-pro
+      api_key: os.environ/GOOGLE_API_KEY
+    model_info:
+      metadata:
+        priority: 3
+        description: "Fallback 2 - Gemini Pro (large context)"
+
+  # =========================================================================
+  # RELATIONSHIPS FEATURE - Inferring memory relationships
+  # =========================================================================
+  # Fallback chain: Sonnet → Opus → Gemini Pro
+  - model_name: relationships
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      metadata:
+        priority: 1
+        description: "Primary relationships - Claude Sonnet (reasoning)"
+
+  - model_name: relationships
+    litellm_params:
+      model: anthropic/claude-opus-4-5-20251101
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      metadata:
+        priority: 2
+        description: "Fallback 1 - Claude Opus (complex reasoning)"
+
+  - model_name: relationships
+    litellm_params:
+      model: gemini/gemini-1.5-pro
+      api_key: os.environ/GOOGLE_API_KEY
+    model_info:
+      metadata:
+        priority: 3
+        description: "Fallback 2 - Gemini Pro (large context)"
+
+  # =========================================================================
+  # THEMES FEATURE - Semantic theme discovery
+  # =========================================================================
+  # Fallback chain: Gemini Pro → Sonnet
+  - model_name: themes
+    litellm_params:
+      model: gemini/gemini-1.5-pro
+      api_key: os.environ/GOOGLE_API_KEY
+    model_info:
+      metadata:
+        priority: 1
+        description: "Primary themes - Gemini Pro (pattern recognition)"
+
+  - model_name: themes
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      metadata:
+        priority: 2
+        description: "Fallback 1 - Claude Sonnet (semantic analysis)"
